@@ -1,93 +1,6 @@
-# mpia-python-template
+# Carpenter
 
-This repository contains a Python template suitable for starting new projects. This template has three main goals:
-- To create a properly 
-packaged Python project which requires minimal set-up effort for the user. Following the seven steps below you will have the structure of a python package in ~15 minutes.
-- To encourage proper testing. This template includes a GitHub actions workflow, `.github/workflows/ci.yml`, that will run continuous integration on the `tests` directory at every push or pull request. 
-- To encourage code and package documentation. This template includes pre-configured documentation in the `docs` directory which will automatically pull the information from the code docstrings. A GitHub actions workflow, `.github/workflows/docs.yml`, also publishes the documentation to a GitHub Pages webpage at every push or pull request.
-
-This template does not assume GitHub tags, it is not set up for PyPi releases and it does not produce ReadTheDocs documentation, however such extensions can be easily added on to the template by motivated users. Please contact the template authors if you need help with these tasks.
-
-There is a lot of (sometimes contradictory) information on how to package a Python project. Here we have generally followed the [current recommendations](https://packaging.python.org/en/latest/tutorials/packaging-projects/) of the Python Packaging Authority. 
-
-# How to Use This Template
-
-Click on the green "Use This Template" button in the upper right corner of the screen to make a copy of the template.
-
-Select location for the new repository. For projects led by MPIA staff and/or with an MPIA advisor, we encourage you to create your copy within the `mpi-astronomy` organization but you can also create a copy under your own account.
-
-Select a name for your repository, select if it should be Public (recommended) or Private. Here as an example we will use `new_project` as the name of your new repository. 
-
-Click on the `Create Repository from Template` button.
-
-# Customize the Template in 7 Easy Steps
-
-1. We recommend creating a new environment for your project. This will allow you to track dependencies a lot easier. There are several different ways to do this (`virtualenv`, `pipenv`). Here we show an example with `conda`:
-
-        conda create --name new_environment python
-        conda activate new_environment
-        
-    Do not install dependencies that are necessary for your code with `conda`. All dependencies should be specified in the `setup.cfg` files (see step 2). If you need some libraries to do diagnostic work, you can install them now (e.g., `pip install numpy matplotlib ipython`) but make sure that they are included in `setup.cfg` if your package needs them.  We recommend using `pip` for installation rather than `conda` (see some notes on the differences [here](https://www.anaconda.com/blog/understanding-conda-and-pip)), unless you need the binaries for a given library. Note: if you do not have `conda` installed, we recommend [`miniconda`](https://docs.conda.io/en/latest/miniconda.html).
-
-2. Make a copy of the repository on your computer. Click on the green `Code` button and copy the HTTPS or SSH link, depending on how you authenticate with GitHub.
-
-        git clone https://github.com/mpi-astronomy/new_project.git
-
-    or
-
-        git clone git@github.com:mpi-astronomy/new_project.git
-
-    If you have not set up HTTPS or SSH authentication for GitHub on your computer, then follow the instructions [here for HTTPS](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token) or [here for SSH](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent).
-
-3. Edit the `setup.cfg` file. 
-
-    Specifically change the following lines:
-
-        name = new_package_name
-        version = 0.0.1
-        author = Your Name
-        author_email = your.name@example.com
-        description = A small example package to do X and Y
-        url = https://github.com/mpi-astronomy/new_project
-        project_urls =
-            Bug Tracker = https://github.com/mpi-astronomy/new_project/issues
-            Source Code = https://github.com/mpi-astronomy/new_project
-
-    The `name` here will be the name of your package, it does not have to be the same as the name of the repository (as shown here). This will be the name used to import your package once installed. See the Python style guide [here](https://peps.python.org/pep-0008/#:~:text=Modules%20should%20have%20short%2C%20all,use%20of%20underscores%20is%20discouraged.) for package naming conventions (tl;dr: use lower case letters and underscores only).
-
-    The `version` variable must be manually incremented. There are only two places where you should set the version: here and in the `CITATION.cff` file (see below). Make sure you increment them both.  
-
-    As you develop your code, you will need to specify any dependencies. Add any new dependencies after 
-    line 28 in `setup.cfg`. 
-
-    Test and documentation dependencies can be specified in the appropriate sections.
-
-4. Rename your package. 
-
-    If you chose a different name for your package in `name` you should now rename your directory name as well. For example, in the previous step I changed the name of this package from the default `my_package` to `new_package_name`. Here we rename the directory too:
-    
-        cd src/
-        git mv my_package new_package_name
-
-5. Edit the `README.md`. Add a short description of your package instead of this text.
-
-6. Edit the `CITATION.cff` file to specify how you want your code cited. The `CITATION.cff` file allows you to generate a `BibTeX` citation directly from the repository page (see `Cite this repository` in the upper right corner of this page). The fields we include here are the minimum recommended in the [AstroBetter post](https://www.astrobetter.com/blog/2019/07/01/citing-astronomy-software-inline-text-examples/) on citing astronomical software with no DOI. Please review the recommendations therein if you would like to add more information to the citation. Additional information about `CITATION.cff` files can be found [here](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-citation-files).   
-
-7. Add your code to the `src/new_package_name/` directory. All your code should be `*.py` files in this directory. Do not add other directories inside `src/` unless you know what you are doing. Add your tests to the `tests/` directory. Edit the `docs/index.rst` file to create documentation for your project. 
-
-🎉 You have a package. 
-
-# What not to Change
-
-1. Do not change the `LICENSE` file and definitely do not delete it. For more information, see [this article](https://www.astrobetter.com/blog/2014/03/10/the-whys-and-hows-of-licensing-scientific-code/). 
-
-2. If the copy is within the `mpi-astronomy` GitHub organization, do not edit the `CODE_OF_CONDUCT.md` file. If the copy is under your personal account, please customize the `CODE_OF_CONDUCT.md` file. One easy way to do that is to remove the text in square braces and to edit the reporting section to read "Any violations of the Code of Conduct should be reported to the owners of this repository."
-
-3. You should not have to change `pyproject.toml` (unless you know what you are doing). In this setup you do not need to have `setup.py` or `requirements.txt` files. All your requirements should be listed in the `setup.cfg` file. If you have a more complex package that requires that things happen at installation, you may also need to create a `setup.py` file, but we are going to keep things here simple.  
-
-# Then What?
-
-Once you have made a local copy of the repository, you can install the package and start developing, testing and documenting it. 
+Tools for working with Merian data. Please read the guideline [here](https://github.com/mpi-astronomy/mpia-python-template) before contributing to this project.
 
 **Installation**
 
@@ -103,8 +16,6 @@ import importlib
 importlib.reload(module_x)
 ```
 
-An accessible description of `pip install` can be found in [here](https://www.reddit.com/r/learnpython/comments/ayx7za/how_does_pip_install_e_work_is_there_a_specific/).
-
 To install a non-editable version, do:
 ```
 cd ~/path/to/new_project
@@ -112,7 +23,7 @@ pip install .
 ```
 This is how you can use your package once you are no longer developing it. Any users who are not contributing code can installing your package with:
 ```
-pip install git+https://github.com/mpi-astronomy/new_project.git
+pip install git+https://github.com/MerianSurvey/carpenter.git
 ```
 
 **Commit early and often**

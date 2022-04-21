@@ -12,15 +12,15 @@
 # Visit https://bit.ly/cffinit to generate yours today!
 
 cff-version: 1.2.0
-title: my_package
+title: carpenter
 message: If you use this software, please cite as below.
-date-released: 2022-03-29
-url: 'https://github.com/mpi-astronomy/mpia-python-template'
+date-released: 2022-04-21
+url: 'https://github.com/MerianSurvey/carpenter'
 version: 0.0.1
 type: software
 authors:
-  - family-names: Name
-    given-names: Author
-    email: author.name@email.com
-    affiliation: MPIA
+  - family-names: Merian
+    given-names: survey
+    email: 
+    affiliation: 
     orcid: 'https://orcid.org/0000-0000-0000-0000'
