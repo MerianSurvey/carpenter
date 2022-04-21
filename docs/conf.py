@@ -17,9 +17,9 @@
 
 # -- Project information -----------------------------------------------------
 
-project = 'my_package'
-copyright = '2022, Author Name'
-author = 'Author Name'
+project = 'carpenter'
+copyright = '2022, Merian Survey'
+author = 'Jiaxuan Li'
 
 
 # -- General configuration ---------------------------------------------------
@@ -28,7 +28,7 @@ author = 'Author Name'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = ['sphinx_automodapi.automodapi'
-]
+              ]
 numpydoc_show_class_members = False
 
 # Add any paths that contain templates here, relative to this directory.
