@@ -515,3 +515,229 @@ def display_merian_cutout_rgb(images, filters=list('griz') + ['N708'],
     if ax is None:
         return fig, img_rgb
     return ax, img_rgb
+
+import matplotlib.gridspec as gridspec
+from matplotlib.ticker import NullFormatter
+from matplotlib.patches import Ellipse
+
+def display_isophote(img, ell, pixel_scale, scale_bar=True, scale_bar_length=50, 
+    physical_scale=None, text=None, ax=None, contrast=None, circle=None):
+    """
+    Visualize the isophotes.
+    
+    Parameters:
+    ----------
+    img: 2-D np.array, image.
+    ell: astropy Table or numpy table, is the output of ELLIPSE.
+    pixel_scale: float, pixel scale in arcsec/pixel.
+    scale_bar: boolean, whether show scale bar.
+    scale_bar_length: float, length of scale bar.
+    physical_scale: float. If not None, the scale bar will be shown in physical scale.
+    text: string. If not None, the string will be shown in the upper left corner.
+    contrast: float. Default contrast is 0.15.
+    circle: **list** of floats. Maximun length is 3.
+
+    Returns:
+    --------
+    ax: matplotlib axes class.
+
+    """
+    if ax is None:
+        fig = plt.figure(figsize=(12, 12))
+        fig.subplots_adjust(left=0.0, right=1.0, 
+                            bottom=0.0, top=1.0,
+                            wspace=0.00, hspace=0.00)
+        gs = gridspec.GridSpec(2, 2)
+        gs.update(wspace=0.0, hspace=0.00)
+        ax1 = fig.add_subplot(gs[0])
+    else:
+        ax1 = ax
+
+    ax1.yaxis.set_major_formatter(NullFormatter())
+    ax1.xaxis.set_major_formatter(NullFormatter())
+
+    cen_x, cen_y = int(img.shape[0]/2), int(img.shape[1]/2)
+
+    if contrast is not None:
+        ax1 = display_single(img, pixel_scale=pixel_scale, ax=ax1, scale_bar=scale_bar, 
+            scale_bar_length=scale_bar_length, physical_scale=physical_scale, 
+            contrast=contrast, add_text=text)
+    else:
+        ax1 = display_single(img, pixel_scale=pixel_scale, ax=ax1, scale_bar=scale_bar, 
+            scale_bar_length=scale_bar_length, physical_scale=physical_scale, 
+            contrast=0.15, add_text=text)
+    
+    for k, iso in enumerate(ell):
+        if k % 2 == 0:
+            e = Ellipse(xy=(iso['x0'], iso['y0']),
+                        height=iso['sma'] * 2.0,
+                        width=iso['sma'] * 2.0 * (1.0 - iso['ell']),
+                        angle=iso['pa_norm'])
+            e.set_facecolor('none')
+            e.set_edgecolor('r')
+            e.set_alpha(0.4)
+            e.set_linewidth(1.1)
+            ax1.add_artist(e)
+    ax1.set_aspect('equal')
+
+    if circle is not None:
+        if physical_scale is not None:
+            r = np.array(circle) / (physical_scale) / (pixel_scale)
+            label_suffix = r'\mathrm{\,kpc}$'
+        else:
+            r = np.array(circle) / pixel_scale
+            label_suffix = r'\mathrm{\,arcsec}$'
+
+        style_list = ['-', '--', '-.']
+
+        for num, rs in enumerate(r):
+            e = Ellipse(xy=(img.shape[1]/2, img.shape[0]/2), 
+                        height=2*rs, width=2*rs, 
+                        linestyle=style_list[num], linewidth=1.5)
+            label = r'$r=' + str(round(circle[num])) + label_suffix
+            e.set_facecolor('none')
+            e.set_edgecolor('w')
+            e.set_label(label)
+            ax1.add_patch(e)
+        
+        leg = ax1.legend(fontsize=15, frameon=False)
+        leg.get_frame().set_facecolor('none')
+        for text in leg.get_texts():
+            text.set_color('w')
+
+    if ax is not None:
+        return ax
+
+# You can plot 1-D SBP using this, without plotting the PA and eccentricity.
+def SBP_single(ell_fix, redshift, pixel_scale, zeropoint, ax=None, offset=0.0, 
+    x_min=1.0, x_max=4.0, alpha=1, physical_unit=False, show_dots=False, show_grid=False, 
+    show_banner=True, vertical_line=None, linecolor='firebrick', linestyle='-', 
+    linewidth=3, labelsize=20, ticksize=17, label='SBP', labelloc='lower left'):
+
+    """Display the 1-D profiles, without showing PA and ellipticity.
+    
+    Parameters:
+    -----------
+    ell_fix: astropy Table or numpy table, should be the output of ELLIPSE.
+    redshift: float, redshift of the object.
+    pixel_scale: float, pixel scale in arcsec/pixel.
+    zeropoint: float, zeropoint of the photometry system.
+    ax: matplotlib axes class.
+    offset: float.
+    x_min, x_max: float, in ^{1/4} scale.
+    alpha: float, transparency.
+    physical_unit: boolean. If true, the figure will be shown in physical scale.
+    show_dots: boolean. If true, it will show all the data points.
+    show_grid: boolean. If true, it will show a grid.
+    vertical_line: list of floats, positions of vertical lines. Maximum length is three.
+    linecolor, linestyle: string. Color and style of SBP.
+    label: string.
+
+    Returns:
+    --------
+    ax: matplotlib axes class.
+
+    """
+    if ax is None:
+        fig = plt.figure(figsize=(10, 10))
+        fig.subplots_adjust(left=0.0, right=1.0, 
+                            bottom=0.0, top=1.0,
+                            wspace=0.00, hspace=0.00)
+
+        ax1 = fig.add_axes([0.08, 0.07, 0.85, 0.88])
+        ax1.tick_params(direction='in')
+    else:
+        ax1 = ax
+        ax1.tick_params(direction='in')
+
+    # Calculate physical size at this redshift
+    phys_size = 1 #imutils.phys_size(redshift, is_print=False)
+
+    # 1-D profile
+    if 'intens_err' in ell_fix.colnames:
+        intens_err_name = 'intens_err'
+    else:
+        intens_err_name = 'int_err'
+
+    if physical_unit is True:
+        x = ell_fix['sma'] * pixel_scale * phys_size
+        y = -2.5 * np.log10((ell_fix['intens'].data + offset) / (pixel_scale)**2) + zeropoint
+        y_upper = -2.5 * np.log10((ell_fix['intens'] + offset + ell_fix[intens_err_name]) / (pixel_scale)**2) + zeropoint
+        y_lower = -2.5 * np.log10((ell_fix['intens'] + offset - ell_fix[intens_err_name]) / (pixel_scale)**2) + zeropoint
+        upper_yerr = y_lower - y
+        lower_yerr = y - y_upper
+        asymmetric_error = [lower_yerr, upper_yerr]
+        xlabel = r'$(R/\mathrm{kpc})^{1/4}$'
+        ylabel = r'$\mu\,[\mathrm{mag/arcsec^2}]$'
+    else:
+        x = ell_fix['sma'] * pixel_scale
+        y = -2.5 * np.log10((ell_fix['intens'].data + offset) / (pixel_scale)**2) + zeropoint
+        y_upper = -2.5 * np.log10((ell_fix['intens'] + offset + ell_fix[intens_err_name]) / (pixel_scale) ** 2) + zeropoint
+        y_lower = -2.5 * np.log10((ell_fix['intens'] + offset - ell_fix[intens_err_name]) / (pixel_scale) ** 2) + zeropoint
+        upper_yerr = y_lower - y
+        lower_yerr = y - y_upper
+        asymmetric_error = [lower_yerr, upper_yerr]
+        xlabel = r'$(R/\mathrm{arcsec})^{1/4}$'
+        ylabel = r'$\mu\,[\mathrm{mag/arcsec^2}]$'
+    
+    # If `nan` at somewhere, interpolate `nan`.
+    if show_grid:
+        ax1.grid(linestyle='--', alpha=0.4, linewidth=2)
+    if show_dots:
+        ax1.errorbar((x ** 0.25), y,
+                 yerr=asymmetric_error,
+                 color='k', alpha=0.2, fmt='o', 
+                 capsize=4, capthick=1, elinewidth=1)
+
+    if label is not None:
+        ax1.plot(x**0.25, y, color=linecolor, linewidth=linewidth, linestyle=linestyle,
+             label=r'$\mathrm{' + label + '}$', alpha=alpha)
+        leg = ax1.legend(fontsize=labelsize, frameon=False, loc=labelloc)
+        for l in leg.legendHandles:
+            l.set_alpha(1)
+    else:
+        ax1.plot(x**0.25, y, color=linecolor, linewidth=linewidth, linestyle=linestyle, alpha=alpha)
+    ax1.fill_between(x**0.25, y_upper, y_lower, color=linecolor, alpha=0.3*alpha, label=None)
+    
+    for tick in ax1.xaxis.get_major_ticks():
+        tick.label.set_fontsize(ticksize)
+    for tick in ax1.yaxis.get_major_ticks():
+        tick.label.set_fontsize(ticksize)
+
+    ax1.set_xlim(x_min, x_max)
+    ax1.set_xlabel(xlabel, fontsize=ticksize)
+    ax1.set_ylabel(ylabel, fontsize=ticksize)
+    ax1.invert_yaxis()
+
+    # Twin axis with linear scale
+    if physical_unit and show_banner is True:
+        ax4 = ax1.twiny() 
+        ax4.tick_params(direction='in')
+        lin_label = [1, 2, 5, 10, 50, 100, 150, 300]
+        lin_pos = [i**0.25 for i in lin_label]
+        ax4.set_xticks(lin_pos)
+        ax4.set_xlim(ax1.get_xlim())
+        ax4.set_xlabel(r'$\mathrm{kpc}$', fontsize=ticksize)
+        ax4.xaxis.set_label_coords(1, 1.025)
+
+        ax4.set_xticklabels([r'$\mathrm{'+str(i)+'}$' for i in lin_label], fontsize=ticksize)
+        for tick in ax4.xaxis.get_major_ticks():
+            tick.label.set_fontsize(ticksize)
+
+    plt.sca(ax1)
+    
+    # Vertical line
+    if vertical_line is not None:
+        if len(vertical_line) > 3:
+            raise ValueError('Maximum length of vertical_line is 3.') 
+        ylim = ax1.get_ylim()
+        style_list = ['-', '--', '-.']
+        for k, pos in enumerate(vertical_line):
+            ax1.axvline(x=pos**0.25, ymin=0, ymax=1,
+                        color='gray', linestyle=style_list[k], linewidth=3, alpha=0.75)
+        plt.ylim(ylim)
+
+    # Return
+    if ax is None:
+        return fig
+    return ax1
