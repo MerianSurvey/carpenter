@@ -743,7 +743,7 @@ def SBP_single(ell_fix, redshift, pixel_scale, zeropoint, ax=None, offset=0.0,
     return ax1
 
 
-def display_scaledimage ( img, ax=None, alpha=0.005, Rmax=np.inf, **kwargs):
+def display_scaledimage ( img, ax=None, alpha=0.005, Rmax=np.inf, colorbar=True, cax=None, **kwargs):
     '''
     Rescale imshow into [alpha/2., 1. - alpha/2.] quantile instead of
     matplotlib default [min, max]
@@ -757,11 +757,22 @@ def display_scaledimage ( img, ax=None, alpha=0.005, Rmax=np.inf, **kwargs):
             colormap computation
     '''
     if ax is None:
-        ax = plt.subplot(111)
+        if colorbar is True:
+            fig, axarr = plt.subplots ( 1,2, figsize=(7,6), gridspec_kw={'width_ratios':(1.,.05)})
+            ax = axarr[0]
+            cax = axarr[1]
+        else:
+            ax = plt.subplot(111)
+        
         
     Y,X = np.mgrid[:img.shape[0],:img.shape[1]] 
     R = np.sqrt((X-X.mean())**2 + (Y-Y.mean())**2)
     
     vmin,vmax = np.nanquantile(img[R<Rmax], [alpha/2., 1.-alpha/2.])
     im = ax.imshow( img, vmin=vmin,vmax=vmax, **kwargs)
+    if colorbar:
+        if cax is None:
+            plt.colorbar ( im, ax=ax )
+        else:
+            plt.colorbar ( im, cax=cax )
     return im
