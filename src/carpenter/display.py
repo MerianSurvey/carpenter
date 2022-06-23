@@ -743,7 +743,7 @@ def SBP_single(ell_fix, redshift, pixel_scale, zeropoint, ax=None, offset=0.0,
     return ax1
 
 
-def display_scaledimage ( img, ax=None, alpha=0.005, **kwargs):
+def display_scaledimage ( img, ax=None, alpha=0.005, Rmax=np.inf, **kwargs):
     '''
     Rescale imshow into [alpha/2., 1. - alpha/2.] quantile instead of
     matplotlib default [min, max]
@@ -752,11 +752,16 @@ def display_scaledimage ( img, ax=None, alpha=0.005, **kwargs):
     img   : (array-like) image to show
     ax    : (AxesSubplot, default=None) axis in which to show image. If None, call 
             ax=plt.subplot(111)
-    alpha : fraction of the image values that the colormap should cover
+    alpha : (float, default=0.005) fraction of the image values that the colormap should cover
+    Rmax  : (float, default=infty) maximum radial distance under which pixel values are included in 
+            colormap computation
     '''
     if ax is None:
         ax = plt.subplot(111)
+        
+    Y,X = np.mgrid[:img.shape[0],:img.shape[1]] 
+    R = np.sqrt((X-X.mean())**2 + (Y-Y.mean())**2)
     
-    vmin,vmax = np.nanquantile(img[R<40], [alpha/2., 1.-alpha/2.])
+    vmin,vmax = np.nanquantile(img[R<Rmax], [alpha/2., 1.-alpha/2.])
     im = ax.imshow( img, vmin=vmin,vmax=vmax, **kwargs)
     return im
