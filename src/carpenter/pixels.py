@@ -3,7 +3,11 @@ import numpy as np
 from scipy import ndimage
 from astropy.modeling import models, fitting
 #from astropy.io import fits
+import sep
 from photutils.psf.matching import create_matching_kernel, CosineBellWindow
+
+average_bb = {'N708':('r','i'), 'N540':('g','r')}
+single_bb = {'N708':'i', 'N540':'r'}
 
 def _pad_psf ( psf, desired_length=65 ):
     '''
@@ -15,8 +19,6 @@ def _pad_psf ( psf, desired_length=65 ):
         raise ValueError ("Padding requires a non-integer pixel count!")
     padding = [ (pad//2,pad//2) for pad in padding]
     return np.pad ( psf, padding )
-
-
 
 class BBMBImage ( object ):
     '''
@@ -44,6 +46,7 @@ class BBMBImage ( object ):
         self.bands = []
         self.distance = distance
         self.galaxy_id = galaxy_id
+                
         
     def add_band ( self, name, image, var=None, psf=None ):
         '''
@@ -154,3 +157,73 @@ class BBMBImage ( object ):
         self.matched_psf = matched_psf
         self.matched_var = matched_var
         return matched_image, matched_psf
+    
+    def compute_mbexcess ( self, band, method='average', psf_matched=True):
+        '''
+        Compute per-pixel medium-band excess over an estimate of the
+        continuum
+        '''
+        if psf_matched:
+            img_d = self.matched_image
+            var_d = self.matched_var
+        else:
+            img_d = self.image
+            var_d = self.var
+        
+        # \\ get MB image
+        mbimg = img_d[band]
+        v_mbimg = var_d[band]
+        
+        # \\ compute our continuum estimate:
+        if method == 'average':
+            bb0,bb1 = average_bb[band]
+            bb_blue = img_d[bb0]
+            bb_red = img_d[bb1]            
+            v_bb_blue = var_d[bb0]
+            v_bb_red = var_d[bb1]
+            
+            continuum = 0.5 * ( bb_blue + bb_red )
+            v_continuum = 0.25 * (v_bb_blue + v_bb_red)
+        elif method == 'single':
+            continuum = img_d[single_bb[band]]
+            v_continuum = img_d[single_bb[band]] 
+        
+        excess = mbimg - continuum
+        v_excess = v_mbimg + v_continuum
+        return excess, v_excess
+    
+    def define_autoaper ( self, excess, v_excess, clobber=False, ellipsify=True, thresh=5. ):
+        if hasattr(self, 'regionauto') and not clobber:
+            return self.regionauto        
+            
+        catalog, segmap = sep.extract ( excess,
+                                        var = v_excess,
+                                        thresh=thresh,
+                                        deblend_cont=0.05,
+                                        segmentation_map=True )
+        size = segmap.shape[0]//2
+        regionauto = (segmap == segmap[size,size])
+    
+        
+        if ellipsify:
+            Y,X = np.mgrid[:regionauto.shape[0],:regionauto.shape[1]]
+            if segmap[size,size] > 0:
+                cid = segmap[size,size] - 1
+            else: # \\ if dead center is a non-detection (e.g. masked)
+                R = np.sqrt ( (Y - size)**2 + (X-size)**2 )                
+                Rseg = np.where ( segmap > 0, R, np.inf )
+                Rmin = np.unravel_index(np.argmin (Rseg), segmap.shape )
+
+                cid = segmap[Rmin] - 1
+                #cid = segmap[segmap>0][np.argmin(R[segmap > 0])]
+                
+            yoff = Y-catalog['y'][cid]
+            xoff = X-catalog['x'][cid]
+            #theta = catalog['theta'][cid]
+            ep = catalog['cyy'][cid]*yoff**2 + catalog['cxx'][cid]*xoff**2 + catalog['cxy'][cid]*xoff*yoff            
+            regionauto = ep < 9. # this value comes from SExtractor manual :shrug: 
+        
+        #self.regionauto = regionauto
+        #self.autocat = catalog[[cid]]
+        #self.segmap = segmap
+        return regionauto, catalog[[cid]]
