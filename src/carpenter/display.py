@@ -749,10 +749,10 @@ def display_scaledimage ( img, ax=None, alpha=0.005, **kwargs):
     matplotlib default [min, max]
     
     {args}
-        img   : (array-like) image to show
-        ax    : (AxesSubplot, default=None) axis in which to show image. If None, call 
-                ax=plt.subplot(111)
-        alpha : fraction of the image values that the colormap should cover
+    img   : (array-like) image to show
+    ax    : (AxesSubplot, default=None) axis in which to show image. If None, call 
+            ax=plt.subplot(111)
+    alpha : fraction of the image values that the colormap should cover
     '''
     if ax is None:
         ax = plt.subplot(111)
