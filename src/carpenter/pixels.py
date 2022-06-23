@@ -1,5 +1,6 @@
 import copy
 import numpy as np
+from scipy import ndimage
 from astropy.modeling import models, fitting
 #from astropy.io import fits
 from photutils.psf.matching import create_matching_kernel, CosineBellWindow
@@ -38,12 +39,13 @@ class BBMBImage ( object ):
         '''
         self.arcsec_per_pix = resolution     
         self.image = {}
+        self.var = {}
         self.psf = {}
         self.bands = []
         self.distance = distance
         self.galaxy_id = galaxy_id
         
-    def add_band ( self, name, image, psf ):
+    def add_band ( self, name, image, var=None, psf=None ):
         '''
         Add a band to the image stack. This assumes that the 
         cutouts are all on the same pixel grid.
@@ -54,6 +56,7 @@ class BBMBImage ( object ):
         psf  : (array-like) PSF image corresponding to image
         '''
         self.image[name] = image
+        self.var[name] = var
         self.psf[name] = psf
         self.bands.append(name)
         
@@ -124,6 +127,7 @@ class BBMBImage ( object ):
 
         matched_image = copy.copy ( self.image )
         matched_psf = copy.copy ( psf )
+        matched_var = copy.copy ( self.var )
         if matchindex is not None:
             badband = self.bands[matchindex]
         elif refband is not None:
@@ -140,6 +144,13 @@ class BBMBImage ( object ):
                                             window=w1)
             matched_image[cband] = ndimage.convolve(self.image[cband], kernel)
             matched_psf[cband] = ndimage.convolve(psf[cband], kernel)
+            
+            # \\ Propagate error through convolution following Klein+21
+            # \\ ignoring initial pixel correlations
+            # \\ ( https://iopscience.iop.org/article/10.3847/2515-5172/abe8df )
+            matched_var[cband] = ndimage.convolve(self.var[cband], kernel**2)
+            
         self.matched_image = matched_image
         self.matched_psf = matched_psf
+        self.matched_var = matched_var
         return matched_image, matched_psf
