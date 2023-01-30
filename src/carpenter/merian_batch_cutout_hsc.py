@@ -386,10 +386,12 @@ def _get_psf(exp, coord):
         return None
 
 
-def generate_cutout(butler, skymap, skymap_name, ra, dec, band='N708', data_type='deepCoadd',
+def generate_cutout(butler, skymap_name, ra, dec, band='N708', data_type='deepCoadd',
                     half_size=10.0 * u.arcsec, psf=True, verbose=False):
     """Generate a single cutout image.
     """
+    skymap = butler.get('skyMap', skymap=skymap_name)
+    
     if not isinstance(half_size, u.Quantity):
         # Assume that this is in pixel
         half_size_pix = int(half_size)
