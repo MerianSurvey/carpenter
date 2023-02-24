@@ -244,12 +244,14 @@ def generate_cutout(butler, skymap_name, ra, dec, band='N708', data_type='deepCo
 
     if not isinstance(half_size, u.Quantity):
         # Assume that this is in pixel
-        half_size_pix = int(half_size)
+        size_pix = int(2 * half_size) + 1
     else:
-        half_size_pix = int(half_size.to('arcsec').value / PIXEL_SCALE)
+        size_pix = int(2 * half_size.to('arcsec').value / PIXEL_SCALE)
 
+    half_size_pix = int((size_pix - 1) / 2)
+    
     # Width and height of the post-stamps
-    stamp_shape = (half_size_pix * 2 + 1, half_size_pix * 2 + 1)
+    stamp_shape = (size_pix + 1, size_pix + 1)
 
     # Make a list of (RA, Dec) that covers the cutout region
     radec_list = np.array(
@@ -310,3 +312,38 @@ def generate_cutout(butler, skymap_name, ra, dec, band='N708', data_type='deepCo
         psf = _get_psf(cutouts[bbox_sorted_ind[-1]], coord)
         return cutout, psf, flag
     return cutout, flag
+
+
+def padding_img(img, output_size=(100, 100)):
+    '''
+    If the sizes of imgs in all bands are not the same, 
+    this function pads the smaller PSFs to the output size.
+    '''
+    # Padding PSF cutouts from HSC
+    max_len = max(img.shape)
+
+    y_len, x_len = img.shape
+    dy = ((max_len - y_len) // 2, (max_len - y_len) // 2)
+    dx = ((max_len - x_len) // 2, (max_len - x_len) // 2)
+
+    if (max_len - y_len) == 1:
+        dy = (1, 0)
+    if (max_len - x_len) == 1:
+        dx = (1, 0)
+
+    temp = np.pad(img.astype('float'),
+                  (dy, dx), 'constant', constant_values=0)
+
+    # Then padding the image to the output size
+    if output_size is not None:
+        temp = np.pad(
+            temp, ((output_size[0] - temp.shape[0]) // 2, (output_size[1] - temp.shape[1]) // 2))
+    if temp.shape[0] == temp.shape[1]:
+        if output_size is not None and abs(temp.shape[0] - output_size[0]) <= 1 and abs(temp.shape[1] - output_size[1]) <= 1:
+            return temp
+        else:
+            raise ValueError(
+                f'The padded image has a size of {temp.shape}, which is not close to the output size.')
+    else:
+        raise ValueError(
+            'The padded image has a size of {temp.shape}, which is not a square.')
