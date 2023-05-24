@@ -152,7 +152,7 @@ def download_hsccutouts ( filename, savedir='./', username=None, ):
     cutout_command = f'cd {savedir}; curl {cutout_url} --form list=@{filename} --user "{username}" | tar xvf -'
     psf_command = f'cd {savedir}; curl {psf_url} --form list=@{filename} --user "{username}" | tar xvf -'
     for command in [cutout_command, psf_command]:
-        subprocess.run ( command )
+        #subprocess.run ( command )
         print(command)
     #output, error = process.communicate ()
     
