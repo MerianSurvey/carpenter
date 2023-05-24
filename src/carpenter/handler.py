@@ -151,8 +151,9 @@ def download_hsccutouts ( filename, savedir='./', username=None, ):
     psf_url = "https://hsc-release.mtk.nao.ac.jp/psf/pdr3/cgi/getpsf?bulk=on"
     cutout_command = f'cd {savedir}; curl {cutout_url} --form list=@{filename} --user "{username}" | tar xvf -'
     psf_command = f'cd {savedir}; curl {psf_url} --form list=@{filename} --user "{username}" | tar xvf -'
-    #subprocess.run ( command )
-    #print(command)
+    for command in [cutout_command, psf_command]:
+        subprocess.run ( command )
+        print(command)
     #output, error = process.communicate ()
     
 def fetch ( coordlist, savedir, butler=None, hsc_username=None, *args, **kwargs ):
