@@ -144,11 +144,15 @@ def setup_hsc_request ( coordlist,
                 print(row, file=f)        
     return downloadfile
 
-def download_hsccutouts ( filename, savedir='./', username=None, ):
+def download_hsccutouts ( filename, savedir='./', username=None, passwd=None):
     if username is None:
         username = f"{os.environ['USER']}@local"
     cutout_url = "https://hsc-release.mtk.nao.ac.jp/das_cutout/pdr3/cgi-bin/cutout"
     psf_url = "https://hsc-release.mtk.nao.ac.jp/psf/pdr3/cgi/getpsf?bulk=on"
+
+    if passwd is not None:
+        username = f"{username}:{passwd}"
+
     cutout_command = f'cd {savedir}; curl {cutout_url} --form list=@{filename} --user "{username}" | tar xvf -'
     psf_command = f'cd {savedir}; curl {psf_url} --form list=@{filename} --user "{username}" | tar xvf -'
     for command in [cutout_command, psf_command]:
@@ -156,7 +160,7 @@ def download_hsccutouts ( filename, savedir='./', username=None, ):
         print(command)
     #output, error = process.communicate ()
     
-def fetch ( coordlist, savedir, butler=None, hsc_username=None, *args, **kwargs ):
+def fetch ( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=None, *args, **kwargs ):
     if not os.path.exists(f'{savedir}/merian/'):
         os.makedirs ( f'{savedir}/merian/' )
     if not os.path.exists(f'{savedir}/hsc'):
@@ -167,4 +171,4 @@ def fetch ( coordlist, savedir, butler=None, hsc_username=None, *args, **kwargs 
         butler = instantiate_butler ()
     merian_cutouts = pull_merian_cutouts ( coordlist, butler, savedir=f'{savedir}/merian/', **kwargs)
     downloadfile = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', **kwargs)
-    download_hsccutouts ( downloadfile, f'{savedir}/hsc', username=hsc_username )
+    download_hsccutouts ( downloadfile, f'{savedir}/hsc', username=hsc_username, passwd=hsc_passwd)
