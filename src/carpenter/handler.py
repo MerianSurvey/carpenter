@@ -191,13 +191,12 @@ def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=No
     coordlist = np.genfromtxt (coordlist)
     if not overwrite:
         keepcoord = [not hsc_images_already_downloaded(c, savedir) for c in coordlist]
-        coordlist = coordlist[keepcoord]
-        if len(coordlist)==0:
+        if sum(keepcoord)==0:
             print("All of these coordinates' cutouts have already been saved!")
             return()
-        if sum(keepcoord)< len(coordlist):
-            print("Some of these coordinates' cutouts have already been saved - skipping!")
-
+        elif sum(keepcoord)< len(coordlist):
+            print(f"Some of these coordinates' cutouts have already been saved! Downloading cutouts for {sum(keepcoord)} sources.")
+        coordlist = coordlist[keepcoord]
     if butler is None:
         butler = instantiate_butler ()
     downloadfile = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_file=False, **kwargs)
@@ -211,16 +210,40 @@ def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=No
             [os.rename(f, os.path.join(savedir, "hsc", f.split("/")[-1])) for f in files]
             os.rmdir(ad)
     if rename_psf:
-        filename_psf_new = lambda band, cname: os.path.join(savedir, "hsc", f"{cname}_HSC-{band.lower()}_psf.fits")
-        filename_psf = lambda band, ra, dec: os.path.join(savedir, "hsc", f"*{band}*{ra:.5f}*{dec:.5f}*")
-        for c in coordlist:
-            ra, dec = c
-            sc = coordinates.SkyCoord (ra, dec, unit='deg' )
-            cname = conventions.produce_merianobjectname(sc)
-            [os.rename(glob.glob(filename_psf(band, ra, dec))[0], 
-                       filename_psf_new(band, cname)) for band in "GRIZY"]
+        do_rename_psf(coordlist, savedir)
 
 
+def do_rename_psf(coordlist, savedir):
+    filename_psf_new = lambda band, cname: os.path.join(savedir, "hsc", f"{cname}_HSC-{band.lower()}_psf.fits")
+    for c in coordlist:
+        ra, dec = c
+        sc = coordinates.SkyCoord (ra, dec, unit='deg' )
+        cname = conventions.produce_merianobjectname(sc)
+        for band in "GRIZY":
+            try: 
+                old_file = list(filter(len, [glob.glob(i) for i in hscpsf_filename_original (band, ra, dec, savedir)]))[0][0]
+                new_file = filename_psf_new(band, cname)
+                os.rename(old_file, new_file)
+                print(f"Renamed {old_file.split('/')[-1]} to {new_file.split('/')[-1]}")
+            except:
+                # print (f"{hscpsf_filename_original (band, ra, dec, savedir)} does not exist")
+                pass
+
+
+def hscpsf_filename_original (band, ra, dec, savedir):
+        ra_trunc = str(ra).split(".")
+        ra_trunc = ra_trunc[0] + "." + ra_trunc[1][:2]
+
+        dec_trunc = str(dec).split(".")
+        dec_trunc = dec_trunc[0] + "." + dec_trunc[1][:2]
+
+        fname_trunc = os.path.join(savedir, "hsc", f"*{band}*{ra_trunc}*{dec_trunc}*")
+        fname_round = os.path.join(savedir, "hsc", f"*{band}*{ra:.2f}*{dec:.2f}*")
+        if fname_trunc!=fname_round:
+                return(fname_trunc, fname_round)
+        else:
+                return([fname_trunc])
+    
 def hsc_images_already_downloaded(coord, savedir):
     ra, dec = coord
     sc = coordinates.SkyCoord (ra, dec, unit='deg' )
@@ -229,8 +252,7 @@ def hsc_images_already_downloaded(coord, savedir):
     filename_cutout = lambda band: os.path.join(savedir, "hsc", f"{cname}_HSC-{band}.fits")
     cutout_exists = np.array([os.path.isfile(filename_cutout(band)) for band in "griz"])
 
-    filename_psf = lambda band: os.path.join(savedir, "hsc", f"*{band}*{ra:.5f}*{dec:.5f}*")
-    psf_exists = np.array([len(glob.glob(filename_psf(band))) > 0 for band in "GRIZY"])
+    psf_exists = np.array([np.any([len(glob.glob(i))>0 for i in hscpsf_filename_original (band, ra, dec, savedir)]) for band in "GRIZY"])
         
     filename_psf_new = lambda band, cname: os.path.join(savedir, "hsc", f"{cname}_HSC-{band.lower()}_psf.fits")
     psf_new_exists = np.array([os.path.isfile(filename_psf_new(band, cname)) for band in "GRIZY"])
@@ -245,13 +267,12 @@ def fetch_merian(coordlist, savedir, butler=None, overwrite=False,
     coordlist = np.genfromtxt (coordlist)
     if not overwrite:
         keepcoord = [not merian_images_already_downloaded(c, savedir) for c in coordlist]
-        coordlist = coordlist[keepcoord]
-        if len(coordlist)==0:
+        if sum(keepcoord)==0:
             print("All of these coordinates' cutouts have already been saved!")
             return()
-        if sum(keepcoord)< len(coordlist):
-            print("Some of these coordinates' cutouts have already been saved - skipping!")
-
+        elif sum(keepcoord)< len(coordlist):
+            print(f"Some of these coordinates' cutouts have already been saved! Downloading cutouts for {sum(keepcoord)} sources.")
+        coordlist = coordlist[keepcoord]
     if butler is None:
         butler = instantiate_butler ()
 
