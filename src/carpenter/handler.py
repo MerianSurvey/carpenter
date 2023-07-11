@@ -10,7 +10,10 @@ from astropy import coordinates
 from astropy.io import fits
 #from astropy.table import Table, hstack
 import astropy.units as u
-from lsst.daf import butler as dafButler
+try:
+    from lsst.daf import butler as dafButler
+except ModuleNotFoundError:
+    print('[LSSTExistenceWarning]: no lsst module found.')
 from .cutout import generate_cutout
 from . import conventions
 import glob
@@ -187,8 +190,12 @@ def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=No
                mvfromsubdir = True, psf_centered="true", rename_psf = True, *args, **kwargs ):
     if not os.path.exists(f'{savedir}/hsc'):
         os.makedirs ( f'{savedir}/hsc/' )
-            
-    coordlist = np.genfromtxt (coordlist)
+    
+    if isinstance(coordlist, str):
+        coordlist = np.genfromtxt (coordlist)
+    else:        
+        coordlist = coordlist
+        
     if not overwrite:
         keepcoord = [not hsc_images_already_downloaded(c, savedir) for c in coordlist]
         if sum(keepcoord)==0:
@@ -197,8 +204,8 @@ def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=No
         elif sum(keepcoord)< len(coordlist):
             print(f"Some of these coordinates' cutouts have already been saved! Downloading cutouts for {sum(keepcoord)} sources.")
         coordlist = coordlist[keepcoord]
-    if butler is None:
-        butler = instantiate_butler ()
+    #if butler is None:
+    #    butler = instantiate_butler ()
     downloadfile = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_file=False, **kwargs)
     downloadfile_psf = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_centered=psf_centered, psf_file=True, **kwargs)
     download_hsccutouts ( downloadfile, downloadfile_psf, f'{savedir}/hsc', username=hsc_username, passwd=hsc_passwd)
