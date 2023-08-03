@@ -1,8 +1,9 @@
 # Carpenter
 
-Tools for working with Merian data. Please read the guideline [here](https://github.com/mpi-astronomy/mpia-python-template) before contributing to this project.
+A repository of tools for working with Merian pixels. Note that this is *NOT* our basic package for catalog manipulation!
 
-Remember to `pip install spherical-geometry` before using the package!
+* Please read the guideline [here](https://github.com/mpi-astronomy/mpia-python-template) before contributing to this project.
+* Remember to `pip install spherical-geometry` before using the package!
 
 **Installation**
 First of all, update your pip to the latest version.
