@@ -144,8 +144,8 @@ def setup_hsc_request ( coordlist,
         print(header, file=f)
         for ccoord in coordlist:
             sc = coordinates.SkyCoord ( *ccoord, unit='deg' )
-            ra_s = sc.ra.to_string(unit='hourangle', sep=":", precision=2 )
-            dec_s = sc.dec.to_string(unit='deg', sep=":", precision=2 )
+            ra_s = sc.ra.to_string(unit='hourangle', sep=":", precision=4 )
+            dec_s = sc.dec.to_string(unit='deg', sep=":", precision=4 )
             for band in 'grizy':
                 objname = f'{conventions.produce_merianobjectname(sc)}_HSC-{band}'
                 if not psf_file:
@@ -193,9 +193,7 @@ def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=No
     
     if isinstance(coordlist, str):
         coordlist = np.genfromtxt (coordlist)
-    else:        
-        coordlist = coordlist
-        
+
     if not overwrite:
         keepcoord = [not hsc_images_already_downloaded(c, savedir) for c in coordlist]
         if sum(keepcoord)==0:
@@ -270,8 +268,10 @@ def fetch_merian(coordlist, savedir, butler=None, overwrite=False,
                  *args, **kwargs ):
     if not os.path.exists(f'{savedir}/merian'):
         os.makedirs ( f'{savedir}/merian/' )
-            
-    coordlist = np.genfromtxt (coordlist)
+    
+    if isinstance(coordlist, str): # \\ if we provide a file, read it in. Else assume that the array is the coordinates
+        coordlist = np.genfromtxt (coordlist)
+        
     if not overwrite:
         keepcoord = [not merian_images_already_downloaded(c, savedir) for c in coordlist]
         if sum(keepcoord)==0:
