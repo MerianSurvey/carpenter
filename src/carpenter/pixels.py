@@ -48,7 +48,7 @@ class BBMBImage ( object ):
         self.galaxy_id = galaxy_id
                 
         
-    def add_band ( self, name, image, var=None, psf=None ):
+    def add_band ( self, name, image, var=None, psf=None, imslice=None ):
         '''
         Add a band to the image stack. This assumes that the 
         cutouts are all on the same pixel grid.
@@ -58,8 +58,10 @@ class BBMBImage ( object ):
         image: (array-like) single-band cutout
         psf  : (array-like) PSF image corresponding to image
         '''
-        self.image[name] = image
-        self.var[name] = var
+        if imslice is None:
+            imslice = slice(None)
+        self.image[name] = image[imslice]
+        self.var[name] = var[imslice]
         self.psf[name] = psf
         self.bands.append(name)
         
@@ -103,7 +105,7 @@ class BBMBImage ( object ):
         return fwhm_a, model_psf
 
     def match_psfs ( self, matchindex=None, refband=None,
-                     psf=None, verbose=True, cbell_alpha=1. ):
+                     psf=None, verbose=True, cbell_alpha=0.5 ):
         '''
         # \\ TODO: make the window function flexible
         
@@ -125,9 +127,10 @@ class BBMBImage ( object ):
             print ('[SEDMap] Matching PSFs')
         if psf is None:
             psf = self.psf
-            
+          
         w1 = CosineBellWindow ( alpha=cbell_alpha )
-
+        if verbose:
+            print('    Copying to matched arrays ... ')
         matched_image = copy.copy ( self.image )
         matched_psf = copy.copy ( psf )
         matched_var = copy.copy ( self.var )
@@ -138,15 +141,21 @@ class BBMBImage ( object ):
             matchindex = self.bands.index(refband)
         else:
             raise ValueError ('Either matchindex or refband must be defined!')
+        if verbose:
+            print('        ... Done.')
         for idx in range(len(self.bands)):
             if idx == matchindex:
                 continue
             cband = self.bands[idx]
+            if verbose:
+                print(f'    Convolving matching kernel for {self.bands[idx]} ...')
             kernel = create_matching_kernel(_pad_psf(psf[cband]),
                                             _pad_psf(psf[badband]),
                                             window=w1)
             matched_image[cband] = ndimage.convolve(self.image[cband], kernel)
             matched_psf[cband] = ndimage.convolve(psf[cband], kernel)
+            if verbose:
+                print('         ... Done.')
             
             # \\ Propagate error through convolution following Klein+21
             # \\ ignoring initial pixel correlations
