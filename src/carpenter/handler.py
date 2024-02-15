@@ -8,7 +8,8 @@ import warnings
 import numpy as np
 from astropy import coordinates
 from astropy.io import fits
-#from astropy.table import Table, hstack
+from astropy.nddata import Cutout2D
+from astropy import wcs
 import astropy.units as u
 try:
     from lsst.daf import butler as dafButler
@@ -121,7 +122,7 @@ def pull_merian_cutouts(coordlist, butler, save=True, savedir='./', half_size=No
     return merian_cutouts
 
 def setup_hsc_request ( coordlist, 
-                       half_size=None, 
+                       half_size, 
                        rerun='pdr3_wide', 
                        image='true', 
                        mask='true', 
@@ -130,8 +131,6 @@ def setup_hsc_request ( coordlist,
                        savedir='./',
                        listname='hsc_download.txt',
                        psf_centered="true", psf_file=False):
-    if half_size is None:
-        half_size = 30.*u.arcsec
     sw = sh = f'{half_size.to(u.arcsec).value:.0f}asec'
     
     if not psf_file:
@@ -187,9 +186,11 @@ def fetch ( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=None,
     download_hsccutouts (downloadfile, savedir = f'{savedir}/hsc', username=hsc_username, passwd=hsc_passwd)
 
 def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=None, overwrite=False,
-               mvfromsubdir = True, psf_centered="true", rename_psf = True, *args, **kwargs ):
+               mvfromsubdir = True, psf_centered="true", rename_psf = True, half_size=None, *args, **kwargs ):
     if not os.path.exists(f'{savedir}/hsc'):
         os.makedirs ( f'{savedir}/hsc/' )
+    if half_size is None:
+        half_size = 30. * u.arcsec
     
     if isinstance(coordlist, str):
         coordlist = np.genfromtxt (coordlist)
@@ -204,18 +205,40 @@ def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=No
         coordlist = coordlist[keepcoord]
     #if butler is None:
     #    butler = instantiate_butler ()
-    downloadfile = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_file=False, **kwargs)
-    downloadfile_psf = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_centered=psf_centered, psf_file=True, **kwargs)
+    downloadfile = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_file=False, half_size=half_size, **kwargs)
+    downloadfile_psf = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_centered=psf_centered, psf_file=True, half_size=half_size, **kwargs)
     download_hsccutouts ( downloadfile, downloadfile_psf, f'{savedir}/hsc', username=hsc_username, passwd=hsc_passwd)
 
     if mvfromsubdir:
         archdir = [i for i in glob.iglob(os.path.join(savedir, "hsc/arch*")) if os.path.isdir(i)]
         for ad in archdir:
             files = glob.glob(os.path.join(ad, "*"))
-            [os.rename(f, os.path.join(savedir, "hsc", f.split("/")[-1])) for f in files]
+            for idx,current_file in enumerate(files):
+                new_file = os.path.join(savedir, "hsc", current_file.split("/")[-1])
+                os.rename ( current_file, new_file )
+                retrim_hsc ( new_file, half_size )
+            #[os.rename(f, os.path.join(savedir, "hsc", f.split("/")[-1])) for f in files]
             os.rmdir(ad)
     if rename_psf:
         do_rename_psf(coordlist, savedir)
+
+def retrim_hsc ( new_file, half_size, ):
+    hsc = fits.open(new_file)
+    name = new_file.split('/')[-1].split("_")[0]
+    cname = f'{name[1:3]}h{name[3:5]}m{name[5:10]}s {name[10:13]}d{name[13:15]}m{name[15:]}s'
+    center = coordinates.SkyCoord ( cname )
+    hsc_wcs = wcs.WCS ( hsc[1].header )
+    
+    newhdulist = fits.HDUList ()
+    newhdulist.append ( hsc[0] )
+    labels = ['','IMAGE','MASK','VARIANCE']
+    for idx in range(1, len(hsc)):
+        cutout = Cutout2D(hsc[idx].data, center, 2.*half_size, wcs=hsc_wcs )
+        imhdu = fits.ImageHDU ( data=cutout.data, header=cutout.wcs.to_header(), name=labels[idx] )
+        newhdulist.append(imhdu)    
+    
+    newhdulist.writeto(new_file, overwrite=True)
+    
 
 
 def do_rename_psf(coordlist, savedir):
