@@ -152,7 +152,7 @@ def setup_hsc_request ( coordlist,
                 else:
                     row = f'{rerun} {ra_s} {dec_s} {sw} {sh} {band} {image} {mask} {variance} {filetype} {objname} {psf_centered}'
                 print(row, file=f)        
-    return downloadfile
+    return listname
 
 def download_hsccutouts ( filename, filename_psf=None, savedir='./', username=None, passwd=None):
     if username is None:
@@ -213,7 +213,7 @@ def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=No
         archdir = [i for i in glob.iglob(os.path.join(savedir, "hsc/arch*")) if os.path.isdir(i)]
         for ad in archdir:
             files = glob.glob(os.path.join(ad, "*"))
-            for idx,current_file in enumerate(files):
+            for idx, current_file in enumerate(files):
                 new_file = os.path.join(savedir, "hsc", current_file.split("/")[-1])
                 os.rename ( current_file, new_file )
                 retrim_hsc ( new_file, half_size )
@@ -267,10 +267,10 @@ def hscpsf_filename_original (band, ra, dec, savedir):
 
         fname_trunc = os.path.join(savedir, "hsc", f"*{band}*{ra_trunc}*{dec_trunc}*")
         fname_round = os.path.join(savedir, "hsc", f"*{band}*{ra:.2f}*{dec:.2f}*")
-        if fname_trunc!=fname_round:
-                return(fname_trunc, fname_round)
+        if fname_trunc != fname_round:
+            return(fname_trunc, fname_round)
         else:
-                return([fname_trunc])
+            return([fname_trunc])
     
 def hsc_images_already_downloaded(coord, savedir):
     ra, dec = coord
