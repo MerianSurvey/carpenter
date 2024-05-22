@@ -4,7 +4,8 @@ from scipy import ndimage
 from astropy.modeling import models, fitting
 #from astropy.io import fits
 import sep
-from photutils.psf.matching import create_matching_kernel, CosineBellWindow
+from photutils.psf.matching import create_matching_kernel, HanningWindow
+from astrocut import cutouts
 
 average_bb = {'N708':('r','i'), 'N540':('g','r')}
 single_bb = {'N708':'i', 'N540':'r'}
@@ -17,7 +18,7 @@ def _pad_psf ( psf, desired_length=65 ):
     padding -= np.asarray(psf.shape)
     if not (padding % 2 == 0).all():
         raise ValueError ("Padding requires a non-integer pixel count!")
-    padding = [ (pad//2,pad//2) for pad in padding]
+    padding = [ (pad//2,pad//2) for pad in padding]    
     return np.pad ( psf, padding )
 
 class BBMBImage ( object ):
@@ -39,16 +40,16 @@ class BBMBImage ( object ):
         # \\ TODO : account for DECam native res. medium-bands and HSC native res. 
         # \\        broadbands ? 
         '''
-        self.arcsec_per_pix = resolution     
+        self.arcsec_per_pix = resolution 
+        self.hdu = {}    
         self.image = {}
         self.var = {}
         self.psf = {}
         self.bands = []
         self.distance = distance
-        self.galaxy_id = galaxy_id
-                
+        self.galaxy_id = galaxy_id          
         
-    def add_band ( self, name, image, var=None, psf=None, imslice=None ):
+    def add_band ( self, name, center, size, image, var=None, psf=None, imslice=None,  ):
         '''
         Add a band to the image stack. This assumes that the 
         cutouts are all on the same pixel grid.
@@ -60,8 +61,11 @@ class BBMBImage ( object ):
         '''
         if imslice is None:
             imslice = slice(None)
-        self.image[name] = image[imslice]
-        self.var[name] = var[imslice]
+        # cc = cutouts._hducut ( x[1], center, [half_size, half_size] )
+        imhdu = cutouts._hducut ( image, center, [size,size] )
+        self.hdu[name] = imhdu.header
+        self.image[name] = imhdu.data[imslice].byteswap().newbyteorder()
+        self.var[name] = cutouts._hducut ( var, center, [size,size] ).data[imslice].byteswap().newbyteorder()
         self.psf[name] = psf
         self.bands.append(name)
         
@@ -105,7 +109,7 @@ class BBMBImage ( object ):
         return fwhm_a, model_psf
 
     def match_psfs ( self, matchindex=None, refband=None,
-                     psf=None, verbose=True, cbell_alpha=0.5 ):
+                     psf=None, verbose=True ):
         '''
         # \\ TODO: make the window function flexible
         
@@ -128,7 +132,9 @@ class BBMBImage ( object ):
         if psf is None:
             psf = self.psf
           
-        w1 = CosineBellWindow ( alpha=cbell_alpha )
+        #w1 = CosineBellWindow ( alpha=cbell_alpha )
+        w1 = HanningWindow ()
+        
         if verbose:
             print('    Copying to matched arrays ... ')
         matched_image = copy.copy ( self.image )
@@ -158,7 +164,7 @@ class BBMBImage ( object ):
                 print('         ... Done.')
             
             # \\ Propagate error through convolution following Klein+21
-            # \\ ignoring initial pixel correlations
+            # \\ ignoring initial pixel correlations!!
             # \\ ( https://iopscience.iop.org/article/10.3847/2515-5172/abe8df )
             matched_var[cband] = ndimage.convolve(self.var[cband], kernel**2)
             
@@ -201,14 +207,19 @@ class BBMBImage ( object ):
         v_excess = v_mbimg + v_continuum
         return excess, v_excess
     
-    def define_autoaper ( self, excess, v_excess, clobber=False, ellipsify=True, thresh=5. ):
+    def define_autoaper ( self, band=None, image=None, var=None, clobber=False, ellipsify=True, thresh=5., ellipse_size=9. ):
         if hasattr(self, 'regionauto') and not clobber:
-            return self.regionauto        
+            return self.regionauto  
+        
+        if image is None:
+            assert band is not None
+            image = self.matched_image[band]
+            var = self.matched_var[band]
             
-        catalog, segmap = sep.extract ( excess,
-                                        var = v_excess,
+        catalog, segmap = sep.extract ( image,
+                                        var = var,
                                         thresh=thresh,
-                                        deblend_cont=0.05,
+                                        #deblend_cont=0.05,
                                         segmentation_map=True )
         size = segmap.shape[0]//2
         regionauto = (segmap == segmap[size,size])
@@ -230,9 +241,36 @@ class BBMBImage ( object ):
             xoff = X-catalog['x'][cid]
             #theta = catalog['theta'][cid]
             ep = catalog['cyy'][cid]*yoff**2 + catalog['cxx'][cid]*xoff**2 + catalog['cxy'][cid]*xoff*yoff            
-            regionauto = ep < 9. # this value comes from SExtractor manual :shrug: 
+            regionauto = ep < ellipse_size # this value comes from SExtractor manual :shrug: 
+        else:
+            print('[pixels.BBMBImage.define_autoaper] Danger! Doing photometry directly from the segmentation map!')
         
         #self.regionauto = regionauto
         #self.autocat = catalog[[cid]]
         #self.segmap = segmap
         return regionauto, catalog[[cid]]
+    
+    def do_ephotometry ( bbmb, image=None, band=None ):
+        objs, segmap = sep.extract(
+            data=bbmb.matched_image['g'],
+            thresh=5,
+            var=bbmb.matched_var['g'],
+            segmentation_map=True
+        )
+        
+        cid = eis.get_centerval(segmap) - 1
+        
+        pix_conversion=1.
+        catparams = objs[cid]
+        cyy = catparams['cyy'] * pix_conversion**2
+        cxx = catparams['cxx'] * pix_conversion**2
+        cxy = catparams['cxy'] * pix_conversion**2
+        
+        y,x = np.mgrid[:bbmb.matched_image['g'].shape[0],:bbmb.matched_image['g'].shape[1]]
+        xoff = x - catparams['x']
+        yoff = y - catparams['y']
+        ellipse = cyy*yoff**2 + cxx*xoff**2 + cxy*xoff*yoff
+        ellipse_size = 9.
+        emask = ellipse < ellipse_size
+        
+        integrated_halum = np.nansum(np.where(emask, halum, 0.))
