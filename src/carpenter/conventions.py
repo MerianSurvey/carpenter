@@ -1,9 +1,10 @@
 """
 Define carpenter naming conventions
 """
+from astropy import coordinates
 import astropy.units as u
 
-def produce_merianobjectname(skycoordobj):
+def produce_merianobjectname(ra=None, dec=None,skycoordobj=None, unit='deg'):
     """
     Given a `skycoordobj` object, returns a string representing the object name in the standard form:
     J{RAhms}{+/-}{DECdms}
@@ -18,6 +19,8 @@ def produce_merianobjectname(skycoordobj):
     cname: str
         A string representing the name of the object in the standard form.
     """
+    if skycoordobj is None:
+        skycoordobj = coordinates.SkyCoord(ra, dec, unit=unit)
     rastring = skycoordobj.ra.to_string(unit=u.hourangle, sep="", precision=2, pad=True)
     decstring = skycoordobj.dec.to_string(unit=u.deg, sep="", precision=2, pad=True)
     sign = '+' if skycoordobj.dec>0 else ''
