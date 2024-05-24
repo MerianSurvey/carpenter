@@ -134,7 +134,6 @@ def _get_patches(butler, skymap, skymap_name, coord_list, band, data_type='deepC
     """
     # Retrieve the Tracts and Patches that cover the cutout region
     patches = get_tract_patch_list(coord_list, skymap)
-
     # Collect the images
     images = []
     for t, p in patches:
@@ -238,7 +237,8 @@ def _get_psf(exp, coord):
 
 def generate_cutout(butler, skymap_name, ra, dec, band='N708', data_type='deepCoadd_calexp',
                     half_size=10.0 * u.arcsec, psf=True, verbose=False):
-    """Generate a single cutout image.
+    """
+    Generate a single cutout image.
     """
     skymap = butler.get('skyMap', skymap=skymap_name)
 

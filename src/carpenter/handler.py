@@ -186,7 +186,7 @@ def fetch ( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=None,
     download_hsccutouts (downloadfile, savedir = f'{savedir}/hsc', username=hsc_username, passwd=hsc_passwd)
 
 def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=None, overwrite=False,
-               mvfromsubdir = True, psf_centered="true", rename_psf = True, half_size=None, *args, **kwargs ):
+               mvfromsubdir = True, psf_centered="true", rename_psf = True, half_size=None, filetype='coadd/bg', *args, **kwargs ):
     if not os.path.exists(f'{savedir}/hsc'):
         os.makedirs ( f'{savedir}/hsc/' )
     if half_size is None:
@@ -205,8 +205,9 @@ def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=No
         coordlist = coordlist[keepcoord]
     #if butler is None:
     #    butler = instantiate_butler ()
-    downloadfile = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_file=False, half_size=half_size, **kwargs)
-    downloadfile_psf = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_centered=psf_centered, psf_file=True, half_size=half_size, **kwargs)
+    downloadfile = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_file=False, half_size=half_size, filetype=filetype, **kwargs)
+    downloadfile_psf = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_centered=psf_centered, psf_file=True, half_size=half_size,
+                                          filetype='coadd', **kwargs)
     download_hsccutouts ( downloadfile, downloadfile_psf, f'{savedir}/hsc', username=hsc_username, passwd=hsc_passwd)
 
     if mvfromsubdir:
