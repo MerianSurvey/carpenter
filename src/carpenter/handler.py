@@ -189,6 +189,11 @@ def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=No
                mvfromsubdir = True, psf_centered="true", rename_psf = True, half_size=None, *args, **kwargs ):
     if not os.path.exists(f'{savedir}/hsc'):
         os.makedirs ( f'{savedir}/hsc/' )
+    for band in 'grizy':
+        for tp in ['image','psf']:
+            if not os.path.exists(f'{savedir}/hsc/hsc_{band}/{tp}'):
+                os.makedirs(f'{savedir}/hsc/hsc_{band}/{tp}')
+    
     if half_size is None:
         half_size = 30. * u.arcsec
     
