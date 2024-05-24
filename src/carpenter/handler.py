@@ -282,12 +282,12 @@ def hsc_images_already_downloaded(coord, savedir):
     sc = coordinates.SkyCoord (ra, dec, unit='deg' )
     cname = conventions.produce_merianobjectname(sc)
 
-    filename_cutout = lambda band: os.path.join(savedir, "hsc", f"{cname}_HSC-{band}.fits")
+    filename_cutout = lambda band: os.path.join(savedir, f"hsc/hsc_{band.lower()}/image", f"{cname}_HSC-{band}.fits")
     cutout_exists = np.array([os.path.isfile(filename_cutout(band)) for band in "griz"])
 
     psf_exists = np.array([np.any([len(glob.glob(i))>0 for i in hscpsf_filename_original (band, ra, dec, savedir)]) for band in "GRIZY"])
         
-    filename_psf_new = lambda band, cname: os.path.join(savedir, "hsc", f"{cname}_HSC-{band.lower()}_psf.fits")
+    filename_psf_new = lambda band, cname: os.path.join(savedir, f"hsc/hsc_{band.lower()}/psf/", f"{cname}_HSC-{band.lower()}_psf.fits")
     psf_new_exists = np.array([os.path.isfile(filename_psf_new(band, cname)) for band in "GRIZY"])
 
     return(np.all(cutout_exists) & (np.all(psf_exists) | np.all(psf_new_exists)))
