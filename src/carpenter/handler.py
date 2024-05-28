@@ -280,6 +280,7 @@ def hscpsf_filename_original (band, ra, dec, savedir):
     
 def hsc_images_already_downloaded(coord, savedir):
     ra, dec = coord
+    print(ra, dec, type(ra), type(dec))
     sc = coordinates.SkyCoord (ra, dec, unit='deg' )
     cname = conventions.produce_merianobjectname(sc)
 
