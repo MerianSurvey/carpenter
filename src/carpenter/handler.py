@@ -280,9 +280,8 @@ def hscpsf_filename_original (band, ra, dec, savedir):
     
 def hsc_images_already_downloaded(coord, savedir):
     ra, dec = coord
-    print(ra, dec, type(ra), type(dec))
     sc = coordinates.SkyCoord (ra, dec, unit='deg' )
-    cname = conventions.produce_merianobjectname(sc)
+    cname = conventions.produce_merianobjectname(skycoordobj=sc)
 
     filename_cutout = lambda band: os.path.join(savedir, f"hsc/hsc_{band.lower()}/image", f"{cname}_HSC-{band}.fits")
     cutout_exists = np.array([os.path.isfile(filename_cutout(band)) for band in "griz"])
@@ -318,7 +317,7 @@ def fetch_merian(coordlist, savedir, butler=None, overwrite=False,
 def merian_images_already_downloaded(coord, savedir):
     ra, dec = coord
     sc = coordinates.SkyCoord (ra, dec, unit='deg' )
-    cname = conventions.produce_merianobjectname(sc)
+    cname = conventions.produce_merianobjectname(skycoordobj=sc)
 
     filename_cutout = lambda band: os.path.join(savedir, "merian", f"{cname}_{band}_merim.fits")
     cutout_exists = np.array([os.path.isfile(filename_cutout(band)) for band in ["N540", "N708"]])
