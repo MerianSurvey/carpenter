@@ -1,6 +1,7 @@
 """
 Define carpenter naming conventions
 """
+import numpy as np
 from astropy import coordinates
 import astropy.units as u
 
@@ -37,3 +38,11 @@ def produce_merianfilename ( skycoordobj, filt, objtype=None, savedir='./' ):
         objtype = f'_{objtype}'
     coordinate_name = produce_merianobjectname(skycoordobj)
     return f'{savedir}/{coordinate_name}_{filt}{objtype}.fits'
+
+def merianobjectname_to_catalogname ( objname, catalog, rakey='RA', deckey='DEC' ):
+    catalog_coords = coordinates.SkyCoord( catalog[rakey], catalog[deckey], unit='deg')
+    target = coordinates.SkyCoord(objname, unit=(u.hourangle, u.deg))
+    target_separation = target.separation ( catalog_coords )
+    assert np.min(target_separation) < (1.*u.arcsec)
+    match = np.argmin(target_separation)
+    return catalog.index[match]
