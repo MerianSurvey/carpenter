@@ -186,7 +186,7 @@ def fetch ( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=None,
     download_hsccutouts (downloadfile, savedir = f'{savedir}/hsc', username=hsc_username, passwd=hsc_passwd)
 
 def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=None, overwrite=False,
-               mvfromsubdir = True, psf_centered="true", rename_psf = True, half_size=None, filetype='coadd/bg', *args, **kwargs ):
+               mvfromsubdir = True, psf_centered="true", rename_psf = True, half_size=None, filetype='coadd/bg', retrim=True, *args, **kwargs ):
     if not os.path.exists(f'{savedir}/hsc'):
         os.makedirs ( f'{savedir}/hsc/' )
     for band in 'grizy':
@@ -216,17 +216,21 @@ def fetch_hsc( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=No
     download_hsccutouts ( downloadfile, downloadfile_psf, f'{savedir}/hsc', username=hsc_username, passwd=hsc_passwd)
 
     if mvfromsubdir:
-        archdir = [i for i in glob.iglob(os.path.join(savedir, "hsc/arch*")) if os.path.isdir(i)]
-        for ad in archdir:
-            files = glob.glob(os.path.join(ad, "*"))
-            for idx, current_file in enumerate(files):
-                new_file = os.path.join(savedir, "hsc", current_file.split("/")[-1])
-                os.rename ( current_file, new_file )
-                retrim_hsc ( new_file, half_size )
-            #[os.rename(f, os.path.join(savedir, "hsc", f.split("/")[-1])) for f in files]
-            os.rmdir(ad)
+        clean_hsc_subdirs (savedir, half_size, retrim)
     if rename_psf:
         do_rename_psf(coordlist, savedir)
+        
+def clean_hsc_subdirs (savedir, half_size, retrim):
+    archdir = [i for i in glob.iglob(os.path.join(savedir, "hsc/arch*")) if os.path.isdir(i)]
+    for ad in archdir:
+        files = glob.glob(os.path.join(ad, "*"))
+        for idx, current_file in enumerate(files):
+            new_file = os.path.join(savedir, "hsc", current_file.split("/")[-1])
+            os.rename ( current_file, new_file )
+            if retrim:
+                retrim_hsc ( new_file, half_size )
+
+        os.rmdir(ad)    
 
 def retrim_hsc ( new_file, half_size, ):
     hsc = fits.open(new_file)
