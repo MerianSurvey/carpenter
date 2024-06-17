@@ -146,7 +146,7 @@ def setup_hsc_request ( coordlist,
             ra_s = sc.ra.to_string(unit='hourangle', sep=":", precision=4 )
             dec_s = sc.dec.to_string(unit='deg', sep=":", precision=4 )
             for band in 'grizy':
-                objname = f'{conventions.produce_merianobjectname(sc)}_HSC-{band}'
+                objname = f'{conventions.produce_merianobjectname(skycoordobj=sc)}_HSC-{band}'
                 if not psf_file:
                     row = f'{rerun} {ra_s} {dec_s} {sw} {sh} {band} {image} {mask} {variance} {filetype} {objname}'
                 else:
@@ -256,7 +256,7 @@ def do_rename_psf(coordlist, savedir):
     for c in coordlist:
         ra, dec = c
         sc = coordinates.SkyCoord (ra, dec, unit='deg' )
-        cname = conventions.produce_merianobjectname(sc)
+        cname = conventions.produce_merianobjectname(skycoordobj=sc)
         for band in "GRIZY":
             try: 
                 old_file = list(filter(len, [glob.glob(i) for i in hscpsf_filename_original (band, ra, dec, savedir)]))[0][0]
