@@ -226,10 +226,15 @@ def clean_hsc_subdirs (savedir, half_size, retrim):
         files = glob.glob(os.path.join(ad, "*"))
         for idx, current_file in enumerate(files):
             new_file = os.path.join(savedir, "hsc", current_file.split("/")[-1])
+            
             os.rename ( current_file, new_file )
+                    
             if retrim:
-                retrim_hsc ( new_file, half_size )
-
+                exitcode = retrim_hsc ( new_file, half_size )
+                if exitcode > 0:
+                    print(f'{new_file} has no WCS!')
+                    os.remove(new_file)
+                    
         os.rmdir(ad)    
 
 def retrim_hsc ( new_file, half_size, ):
@@ -238,6 +243,8 @@ def retrim_hsc ( new_file, half_size, ):
     cname = f'{name[1:3]}h{name[3:5]}m{name[5:10]}s {name[10:13]}d{name[13:15]}m{name[15:]}s'
     center = coordinates.SkyCoord ( cname )
     hsc_wcs = wcs.WCS ( hsc[1].header )
+    if not hsc_wcs.has_celestial:
+        return 1, 'WCS has no celestial coordinates'
     
     newhdulist = fits.HDUList ()
     newhdulist.append ( hsc[0] )
@@ -248,6 +255,7 @@ def retrim_hsc ( new_file, half_size, ):
         newhdulist.append(imhdu)    
     
     newhdulist.writeto(new_file, overwrite=True)
+    return 0, 'Completed'
     
 
 
