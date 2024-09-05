@@ -36,7 +36,7 @@ def produce_merianfilename ( skycoordobj, filt, objtype=None, savedir='./' ):
         objtype = ''
     else:
         objtype = f'_{objtype}'
-    coordinate_name = produce_merianobjectname(skycoordobj)
+    coordinate_name = produce_merianobjectname(skycoordobj=skycoordobj)
     return f'{savedir}/{coordinate_name}_{filt}{objtype}.fits'
 
 def merianobjectname_to_catalogname ( objname, catalog, rakey='RA', deckey='DEC' ):
