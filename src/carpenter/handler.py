@@ -69,7 +69,7 @@ def instantiate_butler ( repo=None, collections=None ):
         repo = _DEFAULT_REPO
     if collections is None:
         collections = _DEFAULT_COLLECTIONS
-    butler = dafButler.Butler(repo, collections=collections)
+    butler = dafButler.Butler(repo, collections=collections )
     return butler
 
 def pull_merian_cutouts(coordlist, butler, save=True, savedir='./', half_size=None):
