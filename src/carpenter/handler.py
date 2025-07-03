@@ -12,7 +12,7 @@ from astropy.nddata import Cutout2D
 from astropy import wcs
 import astropy.units as u
 try:
-    from lsst.daf import butler as dafButler
+    from lsst.daf import butler as dafButler #import Butler
 except ModuleNotFoundError:
     print('[LSSTExistenceWarning]: no lsst module found.')
 from .cutout import generate_cutout
@@ -21,9 +21,12 @@ import glob
 from tqdm import tqdm
 import re
 
-# _DEFAULT_REPO = '/projects/MERIAN/repo/'
-_DEFAULT_REPO = '/scratch/gpfs/MERIAN/repo/repos/main_2022_12_19/'
-_DEFAULT_COLLECTIONS = 'DECam/runs/merian/dr1_wide'
+#/scratch/gpfs/MERIAN/repo/main/DECam/runs/merian/dr1_wide
+#/scratch/gpfs/MERIAN/repo/repos/main_2022_12_19
+_DEFAULT_REPO = '/scratch/gpfs/MERIAN/repo/repos/main_2022_12_19' #'/projects/MERIAN/repo/'
+_DEFAULT_COLLECTIONS = 'DECam/runs/merian/dr1_wide'#dr1_wide'
+
+
 def instantiate_butler ( repo=None, collections=None ):
     """
     Instantiate a Butler object for accessing data from a Data Butler repository.
@@ -115,8 +118,11 @@ def pull_merian_cutouts(coordlist, butler, save=True, savedir='./', half_size=No
                 filename = conventions.produce_merianfilename ( sc, filt, objtype='merim', savedir=savedir )  
                 psfname = conventions.produce_merianfilename ( sc, filt, objtype='merpsf', savedir=savedir )
                 img.writeFits ( filename )
-                psf.writeFits ( psfname )
-                print(f'Saved {filename} ({psfname})')    
+                if psf is not None:
+                    psf.writeFits ( psfname )
+                    print(f'Saved {filename} ({psfname})')    
+                else:
+                    print(f'Saved {filename}')
                 mer_imgs.append(filename)            
             else:
                 mer_imgs.append(img)
@@ -205,6 +211,8 @@ def fetch_hsc( coordlist, savedir, hsc_username=None, hsc_passwd=None, overwrite
     
     if isinstance(coordlist, str):
         coordlist = np.genfromtxt (coordlist)
+        if len(coordlist.shape) == 1: 
+            coordlist = coordlist.reshape(1,-1)        
 
     if not overwrite:
         print ("Finding which coordinates' cutouts have already been downloaded...")
@@ -237,8 +245,8 @@ def clean_hsc_subdirs (savedir, half_size, retrim):
             os.rename ( current_file, new_file )
                     
             if retrim:
-                exitcode = retrim_hsc ( new_file, half_size )
-                if exitcode[0] > 0:
+                exitcode, exitmessage = retrim_hsc ( new_file, half_size )
+                if exitcode > 0:
                     print(f'{new_file} has no WCS!')
                     os.remove(new_file)
                     
@@ -324,6 +332,9 @@ def fetch_merian(coordlist, savedir, butler=None, overwrite=False,
     
     if isinstance(coordlist, str): # \\ if we provide a file, read it in. Else assume that the array is the coordinates
         coordlist = np.genfromtxt (coordlist)
+        if len(coordlist.shape) == 1: 
+            coordlist = coordlist.reshape(1,-1)
+            
         
     if not overwrite:
         keepcoord = [not merian_images_already_downloaded(c, savedir) for c in coordlist]
@@ -340,6 +351,9 @@ def fetch_merian(coordlist, savedir, butler=None, overwrite=False,
 
 def merian_images_already_downloaded(coord, savedir):
     ra, dec = coord
+    #if isinstance(ra, float):
+    #    ra = [ra]
+    #    dec = [dec]
     sc = coordinates.SkyCoord (ra, dec, unit='deg' )
     cname = conventions.produce_merianobjectname(skycoordobj=sc)
 

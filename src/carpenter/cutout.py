@@ -140,7 +140,8 @@ def _get_patches(butler, skymap, skymap_name, coord_list, band, data_type='deepC
         data_id = {'tract': t, 'patch': p,
                    'band': band, 'skymap': skymap_name}
         try:
-            if butler.exists(data_type, data_id):
+            # [EKF] Deprecated since version v26.0: Butler.datasetExists() has been replaced by Butler.exists(). Will be removed after v27.0.
+            if butler.exists(data_type, data_id):            
                 img = butler.get(data_type, data_id)
                 images.append(img)
         except LookupError as e:
