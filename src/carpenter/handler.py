@@ -273,6 +273,7 @@ def retrim_hsc ( new_file, half_size, ):
     return 0, 'Completed'
     
 def do_rename_psf(coordlist, savedir, bands):
+    # do this instead of glob - much faster
     all_files = os.listdir(os.path.join(savedir, 'hsc'))
     filename_psf_new = lambda band, cname: os.path.join(savedir, "hsc", f"{cname}_HSC-{band.lower()}_psf.fits")
     for c in coordlist:
@@ -316,14 +317,14 @@ def hsc_images_already_downloaded(coord, savedir, bands):
     if not np.all(cutout_exists):
         return False
 
-    # psf_exists = np.array([np.any([len(glob.glob(i))>0 for i in hscpsf_filename_original (band, ra, dec, savedir)]) for band in bands])
-
     # filename_psf_new = lambda band, cname: os.path.join(savedir, f"hsc/hsc_{band.lower()}/psf/", f"{cname}_HSC-{band.lower()}_psf.fits")
     filename_psf_new = lambda band, cname: os.path.join(savedir, f"hsc/", f"{cname}_HSC-{band.lower()}_psf.fits")
     psf_new_exists = np.array([os.path.isfile(filename_psf_new(band, cname)) for band in bands])
-
-    # return(np.all(psf_exists) | np.all(psf_new_exists))
     return(np.all(psf_new_exists))
+
+    # much faster to only look for new psf file names - might want to add this back as an option?
+    # psf_exists = np.array([np.any([len(glob.glob(i))>0 for i in hscpsf_filename_original (band, ra, dec, savedir)]) for band in bands])
+    # return(np.all(psf_exists) | np.all(psf_new_exists))
 
 def fetch_merian(coordlist, savedir, butler=None, overwrite=False,
                  *args, **kwargs ):
