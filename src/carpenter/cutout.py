@@ -140,7 +140,7 @@ def _get_patches(butler, skymap, skymap_name, coord_list, band, data_type='deepC
         data_id = {'tract': t, 'patch': p,
                    'band': band, 'skymap': skymap_name}
         try:
-            if butler.datasetExists(data_type, data_id):
+            if butler.exists(data_type, data_id):
                 img = butler.get(data_type, data_id)
                 images.append(img)
         except LookupError as e:
