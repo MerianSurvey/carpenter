@@ -5,7 +5,7 @@ from astropy.modeling import models, fitting
 #from astropy.io import fits
 import sep
 from photutils.psf.matching import create_matching_kernel, HanningWindow
-from astrocut import cutouts
+from astrocut import FITSCutout
 
 average_bb = {'N708':('r','i'), 'N540':('g','r')}
 single_bb = {'N708':'i', 'N540':'r'}
@@ -20,6 +20,7 @@ def _pad_psf ( psf, desired_length=65 ):
         raise ValueError ("Padding requires a non-integer pixel count!")
     padding = [ (pad//2,pad//2) for pad in padding]    
     return np.pad ( psf, padding )
+
 
 class BBMBImage ( object ):
     '''
@@ -62,10 +63,10 @@ class BBMBImage ( object ):
         if imslice is None:
             imslice = slice(None)
         # cc = cutouts._hducut ( x[1], center, [half_size, half_size] )
-        imhdu = cutouts._hducut ( image, center, [size,size] )
+        imhdu = FITSCutout ( image, center, [size,size] )
         self.hdu[name] = imhdu.header
         self.image[name] = imhdu.data[imslice].byteswap().newbyteorder()
-        self.var[name] = cutouts._hducut ( var, center, [size,size] ).data[imslice].byteswap().newbyteorder()
+        self.var[name] = FITSCutout ( var, center, [size,size] ).data[imslice].byteswap().newbyteorder()
         self.psf[name] = psf
         self.bands.append(name)
         
@@ -274,3 +275,16 @@ class BBMBImage ( object ):
         emask = ellipse < ellipse_size
         
         integrated_halum = np.nansum(np.where(emask, halum, 0.))
+        
+def pull_cutouts ( coordinates, savedir, hsc_username=None, hsc_password=None ):
+handler.fetch_merian(cfile, savedir)
+handler.fetch_hsc(cfile, savedir, hsc_username=username, hsc_passwd=password)
+
+def build_bbmb ( gid, **kwargs ):
+    bbmb = pixels.BBMBImage ( )
+    for band in ['g','N540','r','N708','i','z','y']:
+        bbmb.add_band ( band, *load_image(gid, band) )
+
+    fwhm_a, _ = bbmb.measure_psfsizes()
+    mim, mpsf = bbmb.match_psfs ( np.argmax(fwhm_a), cbell_alpha=1., **kwargs )
+    return bbmb
