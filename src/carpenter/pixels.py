@@ -277,8 +277,8 @@ class BBMBImage ( object ):
         integrated_halum = np.nansum(np.where(emask, halum, 0.))
         
 def pull_cutouts ( coordinates, savedir, hsc_username=None, hsc_password=None ):
-handler.fetch_merian(cfile, savedir)
-handler.fetch_hsc(cfile, savedir, hsc_username=username, hsc_passwd=password)
+    handler.fetch_merian(cfile, savedir)
+    handler.fetch_hsc(cfile, savedir, hsc_username=username, hsc_passwd=password)
 
 def build_bbmb ( gid, **kwargs ):
     bbmb = pixels.BBMBImage ( )

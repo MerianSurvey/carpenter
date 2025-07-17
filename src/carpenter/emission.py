@@ -20,7 +20,7 @@ def load_transmission (fname=None, band=None):
     if fname is None:
         if band is None:
             band = 'n708'
-        fname = importlib.resources.files("carpenter").joinpath(f"data/mer_{band}.txt")
+        fname = importlib.resources.files("carpenter").joinpath(f"../../data/mer_{band}.txt")
     transmission = table.Table.read(
         fname,
         comment='#',
