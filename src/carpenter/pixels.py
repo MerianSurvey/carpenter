@@ -1,14 +1,15 @@
 import copy
 import numpy as np
 from scipy import ndimage
+from astropy import coordinates
 from astropy.modeling import models, fitting
-#from astropy.io import fits
+from astropy.io import fits
 import sep
 from photutils.psf.matching import create_matching_kernel, HanningWindow
 from astrocut import FITSCutout
 
-average_bb = {'N708':('r','i'), 'N540':('g','r')}
-single_bb = {'N708':'i', 'N540':'r'}
+average_bb = {'n708':'riz', 'n540':'gr'}
+single_bb = {'n708':'i', 'n540':'r'}
 
 def _pad_psf ( psf, desired_length=65 ):
     '''
@@ -50,24 +51,48 @@ class BBMBImage ( object ):
         self.distance = distance
         self.galaxy_id = galaxy_id          
         
-    def add_band ( self, name, center, size, image, var=None, psf=None, imslice=None,  ):
-        '''
-        Add a band to the image stack. This assumes that the 
-        cutouts are all on the same pixel grid.
-        
-        {args}
-        name : (string) name of band to add
-        image: (array-like) single-band cutout
-        psf  : (array-like) PSF image corresponding to image
-        '''
+    def add_band(self, name, center, size, image, var=None, psf=None, imslice=None, image_ext='IMAGE', var_ext='VARIANCE', psf_ext=0):
+        """
+        Add a new band to the image stack.
+
+        This method assumes that all input cutouts are on the same pixel grid.
+        It extracts a square cutout of shape (size, size) centered at `center`
+        from the input `image`, optional `var` (variance), and stores them along
+        with the optional `psf` under the given `name`.
+
+        Parameters
+        ----------
+        name : str
+            Name of the band to add.
+        center : tuple
+            (x, y) pixel coordinates for the center of the cutout.
+        size : int
+            Half-size of the cutout. The output will be (2*size, 2*size) pixels.
+        image : array-like
+            Image data for the band.
+        var : array-like, optional
+            Variance image corresponding to the band.
+        psf : array-like, optional
+            PSF image corresponding to the band.
+        imslice : slice or tuple of slices, optional
+            Slice object(s) to apply to the cutout. Defaults to full slice.
+
+        Notes
+        -----
+        The extracted image and variance arrays are byte-swapped and set to native byte order.
+        The band name is appended to `self.bands`, and all relevant metadata is stored
+        in internal dictionaries: `self.image`, `self.var`, `self.psf`, and `self.hdu`.
+        """
+        if not isinstance(center, coordinates.SkyCoord):
+            center = coordinates.SkyCoord(center, unit='deg')
         if imslice is None:
             imslice = slice(None)
         # cc = cutouts._hducut ( x[1], center, [half_size, half_size] )
-        imhdu = FITSCutout ( image, center, [size,size] )
+        imhdu = FITSCutout ( image, center, [size,size], extension=image_ext ).fits_cutouts[0][1]
         self.hdu[name] = imhdu.header
         self.image[name] = imhdu.data[imslice].byteswap().newbyteorder()
-        self.var[name] = FITSCutout ( var, center, [size,size] ).data[imslice].byteswap().newbyteorder()
-        self.psf[name] = psf
+        self.var[name] = FITSCutout ( var, center, [size,size], extension=var_ext ).fits_cutouts[0][1].data[imslice].byteswap().newbyteorder()
+        self.psf[name] = fits.getdata(psf, psf_ext)
         self.bands.append(name)
         
     @property
@@ -174,7 +199,18 @@ class BBMBImage ( object ):
         self.matched_var = matched_var
         return matched_image, matched_psf
     
-    def compute_mbexcess ( self, band, method='average', psf_matched=True):
+    def compute_mbexcess ( self,
+                          band, 
+                          method='single', 
+                          scaling_factor=1.,
+                          scaling_band='z',
+                          psf_matched=True, 
+                          extinction_correction=None,
+                          ge_correction=None, 
+                          line_correction=None,
+                          redshift=0.08, 
+                          continuum_type='powerlaw',
+                          ):
         '''
         Compute per-pixel medium-band excess over an estimate of the
         continuum
@@ -192,7 +228,7 @@ class BBMBImage ( object ):
         
         # \\ compute our continuum estimate:
         if method == 'average':
-            bb0,bb1 = average_bb[band]
+            bb0,bb1 = scaling_band
             bb_blue = img_d[bb0]
             bb_red = img_d[bb1]            
             v_bb_blue = var_d[bb0]
@@ -201,12 +237,73 @@ class BBMBImage ( object ):
             continuum = 0.5 * ( bb_blue + bb_red )
             v_continuum = 0.25 * (v_bb_blue + v_bb_red)
         elif method == 'single':
-            continuum = img_d[single_bb[band]]
-            v_continuum = img_d[single_bb[band]] 
-        
+            continuum = img_d[scaling_band]*scaling_factor
+            v_continuum = var_d[scaling_band]*scaling_factor**2
+        elif method == 'abby':
+            from . import emission
+            
+            emission_package = emission.mbestimate_emission_line(
+                img_d[band],
+                img_d['g'],
+                img_d['r'],
+                img_d['i'],
+                img_d['z'],
+                redshift=redshift,
+                u_mb_data=var_d[band]**0.5,
+                u_rdata = var_d['g']**0.5,
+                u_idata = var_d['r']**0.5,
+                band=band,
+                do_aperturecorrection=False,
+                do_extinctioncorrection=extinction_correction is not None,
+                do_gecorrection=ge_correction is not None,
+                do_linecorrection=line_correction is not None,
+                ge_correction=ge_correction,
+                ex_correction=extinction_correction,
+                ns_correction=line_correction,
+                zp=27.,
+                ctype=continuum_type,
+                plawbands=average_bb[band]
+            )
+            return emission_package
+             
+    
         excess = mbimg - continuum
         v_excess = v_mbimg + v_continuum
         return excess, v_excess
+    
+    def clean_nonexcess_sources (self,):
+        from ekfstats import sampling
+        
+        self.cleaned_image = {}
+        
+        for band in self.bands:
+            # \\ only detect things that have substantial negative emission
+            _,segmap = sep.extract(-self.image[band], 5., var=abs(self.var[band]), segmentation_map=True, minarea=5)
+            _,segmap_lsb = sep.extract(-self.image[band], 2., var=abs(self.var[band]), segmentation_map=True, minarea=5)
+
+            # Start with a copy of segmap_lsb to modify
+            filtered_map = np.zeros_like(segmap_lsb)
+
+            # Get the unique labels in segmap_lsb (excluding 0 which is background)
+            labels = np.unique(segmap_lsb)
+            labels = labels[labels != 0]
+
+            # Iterate over each label in segmap_lsb
+            for label in labels:
+                mask = segmap_lsb == label  # Boolean mask of the current blob
+                if np.any(segmap[mask] > 0):  # Check if any pixel in segmap overlaps with a detection
+                    filtered_map[mask] = label  # Keep this blob   
+            
+            bkg_std = sampling.sigmaclipped_std ( self.image[band] )
+            bkg_mean = np.mean(sampling.sigmaclip(self.image[band])[0])
+            self.cleaned_image[band] = np.where(
+                filtered_map,
+                np.nan,#np.random.normal(bkg_mean, bkg_std, filtered_map.shape),
+                self.image[band]
+            )
+            
+            
+        
     
     def define_autoaper ( self, band=None, image=None, var=None, clobber=False, ellipsify=True, thresh=5., ellipse_size=9. ):
         if hasattr(self, 'regionauto') and not clobber:
