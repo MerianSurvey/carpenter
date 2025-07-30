@@ -43,6 +43,6 @@ def merianobjectname_to_catalogname ( objname, catalog, rakey='RA', deckey='DEC'
     catalog_coords = coordinates.SkyCoord( catalog[rakey], catalog[deckey], unit='deg')
     target = coordinates.SkyCoord(objname, unit=(u.hourangle, u.deg))
     target_separation = target.separation ( catalog_coords )
-    assert np.min(target_separation) < (1.*u.arcsec)
+    assert np.min(target_separation) < (1.*u.arcsec), f'Best match found at {np.min(target_separation).to(u.arcsec).value}".'
     match = np.argmin(target_separation)
     return catalog.index[match]

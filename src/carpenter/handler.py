@@ -11,10 +11,11 @@ from astropy.io import fits
 from astropy.nddata import Cutout2D
 from astropy import wcs
 import astropy.units as u
-try:
-    from lsst.daf import butler as dafButler #import Butler
-except ModuleNotFoundError:
-    print('[LSSTExistenceWarning]: no lsst module found.')
+#try:
+#    from lsst.daf import butler as dafButler
+#except ModuleNotFoundError:
+#    print('[LSSTExistenceWarning]: no lsst module found.')
+from lsst.daf import butler as dafButler
 from .cutout import generate_cutout
 from . import conventions
 import glob
