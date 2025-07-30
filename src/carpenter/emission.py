@@ -321,7 +321,10 @@ def compute_emissioncorrections(
         redshift_values = mcat[zphot]
     
     # Apply aperture correction to stellar mass for line contamination estimate
-    aperture_corrected_logmass = mcat[logmstar_key] + np.log10(aperture_correction)
+    if 'gaap' in logmstar_key:
+        aperture_corrected_logmass = mcat[logmstar_key] + np.log10(aperture_correction)
+    else:
+        aperture_corrected_logmass = mcat[logmstar_key]
     emission_correction = correct_NIISII(redshift_values, aperture_corrected_logmass)**-1
     
     if verbose > 0:
