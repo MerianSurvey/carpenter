@@ -1,4 +1,5 @@
 import os
+import time
 import importlib.resources
 
 import numpy as np
@@ -20,7 +21,7 @@ def load_transmission (fname=None, band=None):
     if fname is None:
         if band is None:
             band = 'n708'
-        fname = importlib.resources.files("carpenter").joinpath(f"../../data/mer_{band}.txt")
+        fname = importlib.resources.files("carpenter").joinpath(f"../../data/transmission_curves/mer_{band.lower()}.txt")
     transmission = table.Table.read(
         fname,
         comment='#',
@@ -32,6 +33,24 @@ def load_transmission (fname=None, band=None):
     transmission = transmission[np.argsort(transmission['wv'])]
     transmission['transmission_nu'] = transmission['transmission_lambda']/transmission['freq']**2
     return transmission
+
+def excess_to_lineflux ( flux_freq, band):
+    wv_eff_mb  = {'n540':5400.,'n708':7080.}[band]
+    transmission = load_transmission(None, band=band)
+    #flux_freq = float(table.Table(emcat)['flux'])*conversion*u.nJy
+    flux_wv = observer.fnu_to_flambda(wv_eff_mb * u.AA, flux_freq).to(u.erg/u.s/u.cm**2/u.AA)
+
+    # Calculate filter transmission properties
+    tc_integrated = math.trapz(
+        transmission['transmission_lambda'], 
+        transmission['wv'].value
+    ) * transmission['wv'].unit
+    trans_atline = np.interp(
+        wv_eff_mb, 
+        transmission['wv'], 
+        transmission['transmission_lambda']
+    )
+    return (flux_wv * tc_integrated / trans_atline).to(u.erg/u.s/u.cm**2)
 
 def estimate_av (merian, dirstem=None):
     """
@@ -64,7 +83,7 @@ def estimate_av (merian, dirstem=None):
     """
     
     if dirstem is None:        
-        dirstem = importlib.resources.files("pieridae").joinpath(f"data/")
+        dirstem = importlib.resources.files("carpenter").joinpath(f"../../data/SAGA_dust_predictions/")
     mi = -2.5*np.log10(merian['i_cModelFlux_Merian']*1e-9/3631.)
     Mi = mi - cosmo.distmod(0.08).value
     ri = -2.5*np.log10(merian['r_gaap1p0Flux_aperCorr_Merian']/merian['i_gaap1p0Flux_aperCorr_Merian'])
@@ -183,6 +202,43 @@ def correct_NIISII(z, mass):
             else:
                 return -41.97 * (z - 0.074) + 1.85
             
+def compute_galactic_extinction(ra, dec, verbose=1, dirstem=None,  rv=3.1,):
+    if dirstem is None:        
+        dirstem = importlib.resources.files("carpenter").joinpath(f"../../data/galactic_extinction_maps/")
+    
+    # Use precomputed A_V map for faster computation
+    if verbose > 0:
+        print('Loading precomputed Galactic extinction map...')
+        
+    # Load A_V map and coordinate grids
+    avmap = np.load(f'{dirstem}/avmap.npz')['arr_0']
+    ragrid = np.load(f'{dirstem}/avmap_ragrid.npz')['arr_0']
+    decgrid = np.load(f'{dirstem}/avmap_decgrid.npz')['arr_0']
+    
+    # Handle RA coordinate wrapping by padding the map
+    ra_padded = np.concatenate([ragrid - 360, ragrid, ragrid + 360])
+    avmap_padded = np.hstack([avmap, avmap, avmap])
+    
+    # Create interpolation function
+    ifn = interpolate.RegularGridInterpolator([ra_padded, decgrid], avmap_padded.T)
+    
+    # Extract coordinates and interpolate A_V values
+    #mra = mcat[rakey]
+    #mdec = mcat[deckey]
+    mcoords = np.stack([ra, dec]).T
+    direct_geav = ifn(mcoords)
+    
+    if verbose > 0:
+        print('Interpolated Galactic extinction values from map.')
+
+    # Apply Galactic extinction correction to photometry
+    wv_eff = np.array([1548.85, 2303.37, 7080., 5400.])
+    ge_arr = np.zeros([len(ra),wv_eff.size])
+    for idx,c_av in enumerate(direct_geav):
+        #wv_eff[2] = wv_eff.value * (1. + z)
+        ge_arr[idx] = observer.gecorrection ( wv_eff, c_av, rv, return_magcorr=False)
+    return ge_arr
+            
 def compute_emissioncorrections(
     mcat,
     use_dustengine=False,
@@ -245,7 +301,8 @@ def compute_emissioncorrections(
     """
     
     if dirstem is None:
-        dirstem = DEFAULT_MERIAN_DIR + '/local_data/inputs/'
+        dirstem = importlib.resources.files("carpenter").joinpath(f"../../data/galactic_extinction_maps/")
+        #dirstem = DEFAULT_MERIAN_DIR + '/local_data/inputs/'
     
     if verbose > 0:
         start = time.time()
@@ -270,62 +327,10 @@ def compute_emissioncorrections(
     if verbose > 0:
         print(f'Computed line contamination correction in {time.time() - start:.1f} seconds.')
         start = time.time()
-    
-    # Galactic extinction correction
-    if use_dustengine:
-        # Use dust engine for precise Galactic extinction values
-        if load_from_pickle:
-            if verbose > 0:
-                print('Loading dust engine from pickle file...')
-            with open('../local_data/output/dustengine.pickle', 'rb') as f:
-                dusteng = pickle.load(f)
-        else:
-            if verbose > 0:
-                print('Initializing new dust engine...')
-            dusteng = query.DustEngine()
-        
-        if verbose > 0:
-            print('Querying Galactic extinction from dust engine...')
-        direct_geav = mcat.apply(
-            lambda row: dusteng.get_SandFAV(row[rakey], row[deckey]), 
-            axis=1
-        )
-        
-        # Save dust engine for future use
-        if not load_from_pickle:
-            if verbose > 0:
-                print('Saving dust engine to pickle file...')
-            with open('../local_data/output/dustengine.pickle', 'wb') as f:
-                pickle.dump(dusteng, f)
-                
-    else:
-        # Use precomputed A_V map for faster computation
-        if verbose > 0:
-            print('Loading precomputed Galactic extinction map...')
-            
-        # Load A_V map and coordinate grids
-        avmap = np.load(f'{dirstem}/avmap.npz')['arr_0']
-        ragrid = np.load(f'{dirstem}/avmap_ragrid.npz')['arr_0']
-        decgrid = np.load(f'{dirstem}/avmap_decgrid.npz')['arr_0']
-        
-        # Handle RA coordinate wrapping by padding the map
-        ra_padded = np.concatenate([ragrid - 360, ragrid, ragrid + 360])
-        avmap_padded = np.hstack([avmap, avmap, avmap])
-        
-        # Create interpolation function
-        ifn = interpolate.RegularGridInterpolator([ra_padded, decgrid], avmap_padded.T)
-        
-        # Extract coordinates and interpolate A_V values
-        mra = mcat[rakey]
-        mdec = mcat[deckey]
-        mcoords = np.stack([mra, mdec]).T
-        direct_geav = ifn(mcoords)
-        
-        if verbose > 0:
-            print('Interpolated Galactic extinction values from map.')
-    
+
     # Apply Galactic extinction correction to photometry
-    ge_correction = photometry.uvopt_gecorrection(mcat, av=direct_geav)
+    #ge_correction = photometry.uvopt_gecorrection(mcat, av=direct_geav)
+    ge_correction = compute_galactic_extinction (mcat['RA'], mcat['DEC'])
     
     if verbose > 0:
         print(f'Computed Galactic extinction correction in {time.time() - start:.1f} seconds.')
