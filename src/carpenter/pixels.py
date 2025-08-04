@@ -1,12 +1,15 @@
 import copy
 import numpy as np
 from scipy import ndimage
-from astropy import coordinates
+from astropy import coordinates, cosmology
 from astropy.modeling import models, fitting
+from astropy import units as u
 from astropy.io import fits
 import sep
 from photutils.psf.matching import create_matching_kernel, HanningWindow
 from astrocut import FITSCutout
+
+cosmo = cosmology.FlatLambdaCDM(70.,0.3)
 
 average_bb = {'n708':'riz', 'n540':'gr'}
 single_bb = {'n708':'i', 'n540':'r'}
@@ -372,6 +375,258 @@ class BBMBImage ( object ):
         emask = ellipse < ellipse_size
         
         integrated_halum = np.nansum(np.where(emask, halum, 0.))
+
+
+def calculate_surface_density(image, pixel_scale, radius, redshift=None, distance=None):
+    """
+    Calculate the average surface density within radius R for each pixel in an image.
+    
+    Parameters:
+    -----------
+    image : numpy.ndarray
+        2D input image (e.g., flux density map)
+    pixel_scale : astropy.units.Quantity
+        Physical or angular size of each pixel (e.g., 0.168*u.arcsec or 0.5*u.kpc)
+    radius : astropy.units.Quantity
+        Radius within which to calculate average surface density
+        (e.g., 2*u.arcsec, 5*u.kpc, or 10*u.pixel)
+    redshift : float, optional
+        Redshift of the galaxy (required if converting between angular and physical units)
+    distance : astropy.units.Quantity or astropy.coordinates.Distance, optional
+        Distance to the galaxy (alternative to redshift for distance calculation)
+        
+    Returns:
+    --------
+    surface_density : numpy.ndarray
+        2D array with average surface density within radius R for each pixel
+        
+    Notes:
+    ------
+    - For Merian survey targets (0.05 < z < 0.1), physical scale conversions use
+      the angular diameter distance
+    - Surface density preserves the units of the input image divided by area units
+    - If input image is in flux units, output will be in flux per unit area
+    - Use u.pixel for dimensionless pixel units
+    
+    Examples:
+    ---------
+    >>> import astropy.units as u
+    >>> # HSC pixel scale
+    >>> pixel_scale = 0.168 * u.arcsec
+    >>> radius = 2.0 * u.arcsec
+    >>> surf_dens = calculate_surface_density(image, pixel_scale, radius, redshift=0.075)
+    
+    >>> # Physical scale
+    >>> pixel_scale = 0.168 * u.arcsec  
+    >>> radius = 5.0 * u.kpc
+    >>> surf_dens = calculate_surface_density(image, pixel_scale, radius, redshift=0.075)
+    
+    >>> # Pixel units
+    >>> pixel_scale = 0.168 * u.arcsec
+    >>> radius = 10 * u.pixel
+    >>> surf_dens = calculate_surface_density(image, pixel_scale, radius)
+    """
+    
+    # Input validation
+    if not isinstance(image, np.ndarray) or image.ndim != 2:
+        raise ValueError("Image must be a 2D numpy array")
+    
+    if not isinstance(pixel_scale, u.Quantity):
+        raise ValueError("pixel_scale must be an astropy Quantity with units")
+        
+    if not isinstance(radius, u.Quantity):
+        raise ValueError("radius must be an astropy Quantity with units")
+    
+    if radius.value <= 0:
+        raise ValueError("Radius must be positive")
+    
+    # Convert radius to pixels
+    radius_pixels = _convert_to_pixels(radius, pixel_scale, redshift, distance)
+    
+    # Create a circular kernel for the averaging
+    kernel_size = int(np.ceil(2 * radius_pixels)) + 1
+    if kernel_size % 2 == 0:
+        kernel_size += 1  # Ensure odd size for proper centering
+    
+    # Create coordinate grids for the kernel
+    center = kernel_size // 2
+    y, x = np.ogrid[:kernel_size, :kernel_size]
+    
+    # Create circular mask
+    distance_from_center = np.sqrt((x - center)**2 + (y - center)**2)
+    circular_mask = distance_from_center <= radius_pixels
+    
+    # Normalize the kernel (for average calculation)
+    kernel = circular_mask.astype(float)
+    kernel_sum = np.sum(kernel) # npix
+    if radius.unit.is_equivalent(u.kpc):
+        kernel_area = kernel_sum * ((pixel_scale * cosmo.kpc_comoving_per_arcmin(redshift))**2).to(u.kpc**2)
+    elif radius.unit.is_equivalent(u.arcsec):
+        kernel_area = kernel_sum * pixel_scale.to(u.arcsec)**2
+    elif radius.unit.is_equivalent(u.pix):
+        kernel_area = kernel_sum
+    
+    if kernel_sum == 0:
+        warnings.warn("Radius too small - no pixels included in aperture")
+        return np.zeros_like(image)
+    
+    #kernel = kernel / kernel_sum
+    
+    # Apply convolution to get average surface density
+    
+    surface_density = ndimage.convolve(image, kernel, mode='constant', cval=0.0) 
+    if hasattr(image,'unit'):
+        surface_density = surface_density * image.unit 
+    surface_density = surface_density / kernel_area
+    
+    return surface_density
+
+
+def _convert_to_pixels(radius, pixel_scale, redshift=None, distance=None):
+    """
+    Convert a radius measurement to pixels using astropy units.
+    
+    Parameters:
+    -----------
+    radius : astropy.units.Quantity
+        The radius to convert
+    pixel_scale : astropy.units.Quantity
+        Size of each pixel
+    redshift : float, optional
+        Redshift for cosmological distance calculations
+    distance : astropy.units.Quantity or astropy.coordinates.Distance, optional
+        Distance to the galaxy (alternative to redshift)
+        
+    Returns:
+    --------
+    radius_pixels : float
+        Radius converted to pixels (dimensionless)
+    """
+    
+    # Handle pixel units directly
+    if radius.unit == u.pixel:
+        return radius.value
+    
+    # If pixel_scale is also in pixels, we can't do unit conversion
+    if pixel_scale.unit == u.pixel:
+        if radius.unit != u.pixel:
+            raise ValueError("Cannot convert radius to pixels when pixel_scale is dimensionless")
+        return radius.value
+    
+    # Check if both quantities have compatible dimensions
+    try:
+        # If they're the same type of unit (both angular or both physical), convert directly
+        radius_in_pixel_units = radius.to(pixel_scale.unit)
+        return (radius_in_pixel_units / pixel_scale).decompose().value
+    except u.UnitConversionError:
+        # Need to convert between angular and physical units
+        pass
+    
+    # Determine which quantity is angular and which is physical
+    angular_units = [u.arcsec, u.arcmin, u.deg, u.mas, u.rad]
+    physical_units = [u.kpc, u.pc, u.Mpc, u.m, u.km, u.cm]
+    
+    radius_is_angular = any(radius.unit.is_equivalent(unit) for unit in angular_units)
+    radius_is_physical = any(radius.unit.is_equivalent(unit) for unit in physical_units)
+    pixel_is_angular = any(pixel_scale.unit.is_equivalent(unit) for unit in angular_units)
+    pixel_is_physical = any(pixel_scale.unit.is_equivalent(unit) for unit in physical_units)
+    
+    if not ((radius_is_angular or radius_is_physical) and (pixel_is_angular or pixel_is_physical)):
+        raise ValueError(f"Cannot handle conversion between {radius.unit} and {pixel_scale.unit}")
+    
+    # If one is angular and one is physical, we need distance information
+    if (radius_is_angular and pixel_is_physical) or (radius_is_physical and pixel_is_angular):
+        if distance is None and redshift is None:
+            raise ValueError("Need redshift or distance to convert between angular and physical units")
+        
+        # Get distance
+        if distance is not None:
+            if isinstance(distance, Distance):
+                dist = distance
+            else:
+                # Assume it's a Quantity with distance units
+                dist = Distance(distance)
+        else:
+            dist = cosmo.angular_diameter_distance(redshift)
+        
+        # Convert to consistent units
+        if radius_is_angular and pixel_is_physical:
+            # Convert radius from angular to physical
+            radius_physical = (radius * dist).to(pixel_scale.unit)
+            return (radius_physical / pixel_scale).decompose().value
+        else:
+            # Convert radius from physical to angular
+            radius_angular = ((radius / dist).decompose()*u.rad).to(pixel_scale.unit)
+            return (radius_angular / pixel_scale).decompose().value
+    
+    # Should not reach here
+    raise ValueError(f"Cannot convert from {radius.unit} to pixels with pixel_scale in {pixel_scale.unit}")
+
+
+def get_pixel_area(pixel_scale, redshift=None, distance=None):
+    """
+    Calculate the area of a pixel in various units.
+    
+    Parameters:
+    -----------
+    pixel_scale : astropy.units.Quantity
+        Size of each pixel (linear dimension)
+    redshift : float, optional
+        Redshift for cosmological calculations
+    distance : astropy.units.Quantity or astropy.coordinates.Distance, optional
+        Distance to the galaxy
+        
+    Returns:
+    --------
+    dict : Dictionary with pixel areas in different units
+        Keys: 'arcsec2', 'kpc2', 'pixel' (if applicable)
+    """
+    
+    areas = {}
+    
+    # Physical area
+    if pixel_scale.unit.is_equivalent(u.kpc):
+        physical_area = (pixel_scale**2).to(u.kpc**2)
+        areas['kpc2'] = physical_area
+        
+        # Convert to angular if distance available
+        if distance is not None or redshift is not None:
+            if distance is not None:
+                if isinstance(distance, Distance):
+                    dist = distance
+                else:
+                    dist = Distance(distance)
+            else:
+                dist = cosmo.angular_diameter_distance(redshift)
+            
+            angular_scale = (pixel_scale / dist).to(u.arcsec)
+            areas['arcsec2'] = (angular_scale**2).to(u.arcsec**2)
+    
+    # Angular area
+    elif pixel_scale.unit.is_equivalent(u.arcsec):
+        angular_area = (pixel_scale**2).to(u.arcsec**2)
+        areas['arcsec2'] = angular_area
+        
+        # Convert to physical if distance available
+        if distance is not None or redshift is not None:
+            if distance is not None:
+                if isinstance(distance, Distance):
+                    dist = distance
+                else:
+                    dist = Distance(distance)
+            else:
+                dist = cosmo.angular_diameter_distance(redshift)
+            
+            physical_scale = (pixel_scale.to(u.rad).value * dist).to(u.kpc)
+            areas['kpc2'] = (physical_scale**2).to(u.kpc**2)
+    
+    # Dimensionless pixels
+    elif pixel_scale.unit == u.pixel:
+        areas['pixel'] = pixel_scale**2
+    
+    return areas
+
+
         
 def pull_cutouts ( coordinates, savedir, hsc_username=None, hsc_password=None ):
     handler.fetch_merian(cfile, savedir)
