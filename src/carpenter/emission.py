@@ -553,7 +553,7 @@ def mbestimate_emission_line(
         u_line_flux *= apercorr
         fcontinuum_ac = bandspecflux_continuum * apercorr
     else:
-        fcontinuum_ac = bandspecflux_continuum
+        fcontinuum_ac = bandspecflux_continuum.copy()
         
     # Apply internal extinction correction
     if do_extinctioncorrection:
