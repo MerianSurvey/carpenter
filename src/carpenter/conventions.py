@@ -26,9 +26,8 @@ def produce_merianobjectname(ra=None, dec=None,skycoordobj=None, unit='deg'):
     decstring = skycoordobj.dec.to_string(unit=u.deg, sep="", precision=2, pad=True)
     sign = np.where(skycoordobj.dec >= 0, '+', '').astype(rastring.dtype)
     cname = np.char.add("J", np.char.add(np.char.add(rastring, sign), decstring))
-
     if skycoordobj.size == 1:
-        cname = cname[0]
+        cname = str(cname)
 
     return cname
 
