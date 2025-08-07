@@ -104,7 +104,7 @@ def estimate_av (merian, dirstem=None):
     return av, u_av
 
 
-def correct_NIISII(z, mass):
+def correct_NIISII(z, mass, source = "DESI"):
     """
     Calculate correction factors for [NII] and [SII] line contamination in N708 filter.
     
@@ -143,6 +143,16 @@ def correct_NIISII(z, mass):
     >>> corrections = correct_NIISII([0.07, 0.08, 0.09], [9.0, 9.5, 10.0])
     """
     
+    # SDSS
+    if source == "SDSS":
+        c0 = (1.39, 1.22, -18.8)
+        c1 = (1.77, 1.39, -41.29)
+        c2 = (1.85, 1.48, -41.97)
+    elif source == "DESI":
+        c0 = (1.47, 1.06, -45.70)
+        c1 = (1.77, 1.29, -53.29)
+        c2 = (1.86, 1.40, -50.89)
+    
     # Handle both scalar and array inputs
     if hasattr(mass, 'all'):  # Array input
         correction = np.zeros_like(mass)
@@ -158,49 +168,49 @@ def correct_NIISII(z, mass):
         highz = z > 0.083
         
         # Low mass corrections
-        correction[lowmass & lowz] = 1.39
-        correction[lowmass & midz] = -18.8 * (z[lowmass & midz] - 0.074) + 1.39
-        correction[lowmass & highz] = 1.22
-        
+        correction[lowmass & lowz] = c0[0]
+        correction[lowmass & midz] = c0[2] * (z[lowmass & midz] - 0.074) + c0[0]
+        correction[lowmass & highz] = c0[1]
+
         # Mid mass corrections
-        correction[midmass & lowz] = 1.77
-        correction[midmass & midz] = -41.29 * (z[midmass & midz] - 0.074) + 1.77
-        correction[midmass & highz] = 1.39
-        
+        correction[midmass & lowz] = c1[0]
+        correction[midmass & midz] = c1[2] * (z[midmass & midz] - 0.074) + c1[0]
+        correction[midmass & highz] = c1[1]
+
         # High mass corrections
-        correction[highmass & lowz] = 1.85
-        correction[highmass & midz] = -41.97 * (z[highmass & midz] - 0.074) + 1.85
-        correction[highmass & highz] = 1.48
-        
+        correction[highmass & lowz] = c2[0]
+        correction[highmass & midz] = c2[2] * (z[highmass & midz] - 0.074) + c2[0]
+        correction[highmass & highz] = c2[1]
+
         return correction
         
     else:  # Scalar input
         # Low mass regime (log M* < 9.2)
         if mass < 9.2:
             if z < 0.074:
-                return 1.39
+                return c0[0]
             elif z > 0.083:
-                return 1.22
+                return c0[1]
             else:
-                return -18.8 * (z - 0.074) + 1.39
-        
+                return c0[2] * (z - 0.074) + c0[0]
+
         # Mid mass regime (9.2 <= log M* < 9.8)
         elif mass < 9.8:
             if z < 0.074:
-                return 1.77
+                return c1[0]
             elif z > 0.083:
-                return 1.39
+                return c1[1]
             else:
-                return -41.29 * (z - 0.074) + 1.77
-        
+                return c1[2] * (z - 0.074) + c1[0]
+
         # High mass regime (log M* >= 9.8)
         else:
             if z < 0.074:
-                return 1.85
+                return c2[0]
             elif z > 0.083:
-                return 1.48
+                return c2[1]
             else:
-                return -41.97 * (z - 0.074) + 1.85
+                return c2[2] * (z - 0.074) + c2[0]
             
 def compute_galactic_extinction(ra, dec, verbose=1, dirstem=None,  rv=3.1,):
     if dirstem is None:        
