@@ -65,7 +65,7 @@ class BBMBImage ( object ):
         name : str
             Name of the band to add.
         center : tuple
-            (x, y) pixel coordinates for the center of the cutout.
+            (ra, dec) coordinates for the center of the cutout.
         size : int
             Half-size of the cutout. The output will be (2*size, 2*size) pixels.
         image : array-like
@@ -84,7 +84,7 @@ class BBMBImage ( object ):
         in internal dictionaries: `self.image`, `self.var`, `self.psf`, and `self.hdu`.
         """
         if not isinstance(center, coordinates.SkyCoord):
-            center = coordinates.SkyCoord(center, unit='deg')
+            center = coordinates.SkyCoord(*center, unit='deg')
         if imslice is None:
             imslice = slice(None)
         # cc = cutouts._hducut ( x[1], center, [half_size, half_size] )
