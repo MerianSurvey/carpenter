@@ -409,6 +409,7 @@ def mbestimate_emission_line(
         band='n708',
         ctype='powerlaw',
         plawbands='griz',
+        return_continuum_at_line_center=False
 
     ):
     """
@@ -518,8 +519,18 @@ def mbestimate_emission_line(
         lsq_x = np.log10(wv_eff)
         lsq_y = np.log10(np.array([fdict[band] for band in plawbands]))
         lsq_coeffs = fit.closedform_leastsq(lsq_x, lsq_y)
-        bandspecflux_continuum = 10.**(lsq_coeffs[0] + lsq_coeffs[1] * np.log10(wv_eff_mb)).flatten() * specflux_unit
-    
+        
+        # Continuum flux at line center 
+        line_center_continuum = 10.**(lsq_coeffs[0] + lsq_coeffs[1] * np.log10(wv_rest_mb * (1+redshift))).flatten() * specflux_unit
+
+        # Calculate total continuum contribution through medium band
+        lsq_coeffs = lsq_coeffs.reshape((2, -1)) # reshape for efficiency
+        continuum = 10.**(lsq_coeffs[0][:, np.newaxis] + lsq_coeffs[1][:, np.newaxis] * np.log10(transmission['wv']))* specflux_unit
+        filt_norm = np.trapz(transmission['transmission_lambda'] / transmission['wv'], transmission['wv']) 
+        bandspecflux_continuum = np.trapz(
+                                        transmission['transmission_lambda'] * continuum / transmission['wv'], 
+                                        transmission['wv'], axis=1) / filt_norm
+        
     # Subtract continuum from medium-band flux to get line flux
     bandspecflux_line = mb_data * specflux_unit - bandspecflux_continuum
     
@@ -611,6 +622,14 @@ def mbestimate_emission_line(
         (line_flux * u_distance_factor)**2
     )
     
+    if return_continuum_at_line_center:
+            return (
+            (line_flux, u_line_flux), 
+            (line_luminosity, u_line_luminosity), 
+            (line_ew, u_line_ew), 
+            fcontinuum_ac.to(u.nJy),
+            line_center_continuum)
+
     return (
         (line_flux, u_line_flux), 
         (line_luminosity, u_line_luminosity), 
