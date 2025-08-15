@@ -517,15 +517,20 @@ def mbestimate_emission_line(
         fdict = {'g': gdata, 'r': rdata, 'i': idata, 'z': zdata}
         wv_eff = np.array([wdict[band] for band in plawbands])
         lsq_x = np.log10(wv_eff)
-        lsq_y = np.log10(np.array([fdict[band] for band in plawbands]))
+        # shift everything vertically to avoid log of negative values
+        v_offset = np.min(np.array([fdict[band] for band in plawbands]), axis=0)
+        v_offset = np.where(v_offset > 0, 0, v_offset*1.01) # only need to shift if negative and need min to be >0
+        lsq_y = np.log10(np.array([fdict[band] for band in plawbands] - v_offset))
         lsq_coeffs = fit.closedform_leastsq(lsq_x, lsq_y)
         
         # Continuum flux at line center 
         line_center_continuum = 10.**(lsq_coeffs[0] + lsq_coeffs[1] * np.log10(wv_rest_mb * (1+redshift))).flatten() * specflux_unit
+        line_center_continuum += v_offset * specflux_unit  # add back vertical offset
 
         # Calculate total continuum contribution through medium band
         lsq_coeffs = lsq_coeffs.reshape((2, -1)) # reshape for efficiency
         continuum = 10.**(lsq_coeffs[0][:, np.newaxis] + lsq_coeffs[1][:, np.newaxis] * np.log10(transmission['wv']))* specflux_unit
+        continuum += v_offset.reshape(-1,1) * specflux_unit  # add back vertical offset
         filt_norm = np.trapz(transmission['transmission_lambda'] / transmission['wv'], transmission['wv']) 
         bandspecflux_continuum = np.trapz(
                                         transmission['transmission_lambda'] * continuum / transmission['wv'], 
