@@ -7,9 +7,10 @@ from astropy.io import fits
 import sep
 from photutils.psf.matching import create_matching_kernel, HanningWindow
 from astrocut import FITSCutout
+import astropy.units as u
 
-average_bb = {'n708':'riz', 'n540':'gr'}
-single_bb = {'n708':'i', 'n540':'r'}
+average_bb = {'N708':'riz', 'N540':'gr'}
+single_bb = {'N708':'i', 'N540':'r'}
 
 def _pad_psf ( psf, desired_length=65 ):
     '''
@@ -239,20 +240,20 @@ class BBMBImage ( object ):
         elif method == 'single':
             continuum = img_d[scaling_band]*scaling_factor
             v_continuum = var_d[scaling_band]*scaling_factor**2
-        elif method == 'abby':
+        elif method == '2dpowerlaw':
             from . import emission
             
             emission_package = emission.mbestimate_emission_line(
-                img_d[band],
-                img_d['g'],
-                img_d['r'],
-                img_d['i'],
-                img_d['z'],
+                img_d[band].flatten(),
+                img_d['g'].flatten(),
+                img_d['r'].flatten(),
+                img_d['i'].flatten(),
+                img_d['z'].flatten(),
                 redshift=redshift,
-                u_mb_data=var_d[band]**0.5,
-                u_rdata = var_d['g']**0.5,
-                u_idata = var_d['r']**0.5,
-                band=band,
+                u_mb_data=var_d[band].flatten()**0.5,
+                u_rdata = var_d['g'].flatten()**0.5,
+                u_idata = var_d['r'].flatten()**0.5,
+                band=band.lower(),
                 do_aperturecorrection=False,
                 do_extinctioncorrection=extinction_correction is not None,
                 do_gecorrection=ge_correction is not None,
@@ -262,14 +263,16 @@ class BBMBImage ( object ):
                 ns_correction=line_correction,
                 zp=27.,
                 ctype=continuum_type,
-                plawbands=average_bb[band]
+                plawbands=average_bb[band],
+                specflux_unit = u.nJy
             )
-            return emission_package
-             
+            # return emission_package
+            continuum = emission_package[3].value.reshape(mbimg.shape)
+            v_continuum = np.zeros_like(continuum) # \\ ignoring uncertainty in continuum estimate for now
     
         excess = mbimg - continuum
         v_excess = v_mbimg + v_continuum
-        return excess, v_excess
+        return excess, v_excess, continuum
     
     def clean_nonexcess_sources (self,):
         from ekfstats import sampling
