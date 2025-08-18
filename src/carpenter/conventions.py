@@ -24,8 +24,11 @@ def produce_merianobjectname(ra=None, dec=None,skycoordobj=None, unit='deg'):
         skycoordobj = coordinates.SkyCoord(ra, dec, unit=unit)
     rastring = skycoordobj.ra.to_string(unit=u.hourangle, sep="", precision=2, pad=True)
     decstring = skycoordobj.dec.to_string(unit=u.deg, sep="", precision=2, pad=True)
-    sign = '+' if skycoordobj.dec>0 else ''
-    cname = f'J{rastring}{sign}{decstring}'
+    sign = np.where(skycoordobj.dec >= 0, '+', '').astype(rastring.dtype)
+    cname = np.char.add("J", np.char.add(np.char.add(rastring, sign), decstring))
+    if skycoordobj.size == 1:
+        cname = str(cname)
+
     return cname
 
 def produce_merianfilename ( skycoordobj, filt, objtype=None, savedir='./' ):
