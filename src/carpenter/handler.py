@@ -286,6 +286,9 @@ def do_rename_psf(coordlist, savedir, bands):
             old_file = np.concatenate([[f for f in all_files if re.compile(fname.replace('X', band.upper())).match(f)] for fname in fnames])
             if len(old_file) > 0:
                 old_file = old_file[0]
+                if not os.path.exists(os.path.join(savedir, 'hsc', old_file)):
+                    print(f"No old file found for {cname} in {band} band")
+                    continue
                 new_file = filename_psf_new(band, cname)
                 os.rename(os.path.join(savedir, 'hsc', old_file), new_file)
                 print(f"Renamed {old_file.split('/')[-1]} to {new_file.split('/')[-1]}")
