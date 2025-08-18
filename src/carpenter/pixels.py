@@ -121,6 +121,8 @@ class BBMBImage ( object ):
                 
         fit_p = fitting.LevMarLSQFitter()
         fwhm_a = np.zeros(len(bands))
+        alpha_a = np.zeros(len(bands))
+        gamma_a = np.zeros(len(bands))
         model_psf = copy.copy(psf)
         for ix,band in enumerate(bands):
             z = _pad_psf(psf[band])
@@ -131,10 +133,13 @@ class BBMBImage ( object ):
             p_init = models.Moffat2D(x_0=mid[0], y_0=mid[1], amplitude=z[mid[0],mid[1]])
             p = fit_p(p_init, x, y, z)
             fwhm_a[ix] = p.fwhm
+            alpha_a[ix] = p.alpha.value
+            gamma_a[ix] = p.gamma.value
             model_psf[band] = p(x,y)
         if save:
             self.fwhm_to_match = fwhm_a.max()
             self.band_to_match = self.bands[np.argmax(fwhm_a)]
+            self.psf_matching_params = {'alpha':alpha_a[np.argmax(fwhm_a)], 'gamma':gamma_a[np.argmax(fwhm_a)]}
         return fwhm_a, model_psf
 
     def match_psfs ( self, matchindex=None, refband=None,
