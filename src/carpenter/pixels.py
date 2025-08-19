@@ -5,9 +5,10 @@ from astropy import coordinates
 from astropy.modeling import models, fitting
 from astropy.io import fits
 import sep
-from photutils.psf.matching import create_matching_kernel, HanningWindow
+from photutils.psf.matching import create_matching_kernel, HanningWindow, CosineBellWindow
 from astrocut import FITSCutout
 import astropy.units as u
+from scipy.ndimage import generic_filter
 
 average_bb = {'N708':'riz', 'N540':'gr'}
 single_bb = {'N708':'i', 'N540':'r'}
@@ -136,7 +137,7 @@ class BBMBImage ( object ):
         return fwhm_a, model_psf
 
     def match_psfs ( self, matchindex=None, refband=None,
-                     psf=None, verbose=True ):
+                     psf=None, verbose=True, w_type = 'hanning' ):
         '''
         # \\ TODO: make the window function flexible
         
@@ -158,9 +159,11 @@ class BBMBImage ( object ):
             print ('[SEDMap] Matching PSFs')
         if psf is None:
             psf = self.psf
-          
-        #w1 = CosineBellWindow ( alpha=cbell_alpha )
-        w1 = HanningWindow ()
+
+        if w_type == 'hanning':
+            w1 = HanningWindow ()
+        elif w_type == 'cosine':
+            w1 = CosineBellWindow ( alpha=0.8 )
         
         if verbose:
             print('    Copying to matched arrays ... ')
@@ -206,6 +209,8 @@ class BBMBImage ( object ):
                           scaling_factor=1.,
                           scaling_band='z',
                           psf_matched=True, 
+                          pre_smooth=False,
+                          post_smooth=False,
                           extinction_correction=None,
                           ge_correction=None, 
                           line_correction=None,
@@ -222,7 +227,7 @@ class BBMBImage ( object ):
         else:
             img_d = self.image
             var_d = self.var
-        
+
         # \\ get MB image
         mbimg = img_d[band]
         v_mbimg = var_d[band]
@@ -242,17 +247,22 @@ class BBMBImage ( object ):
             v_continuum = var_d[scaling_band]*scaling_factor**2
         elif method == '2dpowerlaw':
             from . import emission
-            
+
+            if pre_smooth:
+                img_c = dict([(b,generic_filter(img_d[b], np.mean, size=3)) for b in img_d.keys()])
+            else:
+                img_c = img_d
+
             emission_package = emission.mbestimate_emission_line(
-                img_d[band].flatten(),
-                img_d['g'].flatten(),
-                img_d['r'].flatten(),
-                img_d['i'].flatten(),
-                img_d['z'].flatten(),
+                img_c[band].flatten(),
+                img_c['g'].flatten(),
+                img_c['r'].flatten(),
+                img_c['i'].flatten(),
+                img_c['z'].flatten(),
                 redshift=redshift,
                 u_mb_data=var_d[band].flatten()**0.5,
-                u_rdata = var_d['g'].flatten()**0.5,
-                u_idata = var_d['r'].flatten()**0.5,
+                u_rdata=var_d['g'].flatten()**0.5,
+                u_idata=var_d['r'].flatten()**0.5,
                 band=band.lower(),
                 do_aperturecorrection=False,
                 do_extinctioncorrection=extinction_correction is not None,
@@ -268,6 +278,9 @@ class BBMBImage ( object ):
             )
             # return emission_package
             continuum = emission_package[3].value.reshape(mbimg.shape)
+            continuum = continuum/img_c[scaling_band] * img_d[scaling_band] # will have no effect if pre_smooth=False
+            if post_smooth:
+                continuum = generic_filter(continuum, np.mean, size=3) 
             v_continuum = np.zeros_like(continuum) # \\ ignoring uncertainty in continuum estimate for now
     
         excess = mbimg - continuum
