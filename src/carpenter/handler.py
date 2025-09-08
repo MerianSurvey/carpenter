@@ -266,8 +266,11 @@ def retrim_hsc ( new_file, half_size, ):
     newhdulist.append ( hsc[0] )
     labels = ['','IMAGE','MASK','VARIANCE']
     for idx in range(1, len(hsc)):
-        cutout = Cutout2D(hsc[idx].data, center, 2.*half_size, wcs=hsc_wcs )
-        imhdu = fits.ImageHDU ( data=cutout.data, header=cutout.wcs.to_header(), name=labels[idx] )
+        try:
+            cutout = Cutout2D(hsc[idx].data, center, 2.*half_size, wcs=hsc_wcs )
+            imhdu = fits.ImageHDU ( data=cutout.data, header=cutout.wcs.to_header(), name=labels[idx] )
+        except (TypeError, ValueError, MemoryError):
+            imhdu = fits.ImageHDU ( data=None, header=hsc_wcs.to_header(), name=labels[idx] )
         newhdulist.append(imhdu)    
     
     newhdulist.writeto(new_file, overwrite=True)
