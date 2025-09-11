@@ -9,6 +9,9 @@ from photutils.psf.matching import create_matching_kernel, HanningWindow, Cosine
 from astrocut import FITSCutout
 import astropy.units as u
 from scipy.ndimage import generic_filter
+from astropy.wcs import WCS
+from reproject import reproject_interp
+
 
 average_bb = {'N708':'riz', 'N540':'gr'}
 single_bb = {'N708':'i', 'N540':'r'}
@@ -19,6 +22,7 @@ def _pad_psf ( psf, desired_length=65 ):
     '''
     padding = np.array([desired_length,desired_length])
     padding -= np.asarray(psf.shape)
+
     if not (padding % 2 == 0).all():
         raise ValueError ("Padding requires a non-integer pixel count!")
     padding = [ (pad//2,pad//2) for pad in padding]    
@@ -137,7 +141,8 @@ class BBMBImage ( object ):
         return fwhm_a, model_psf
 
     def match_psfs ( self, matchindex=None, refband=None,
-                     psf=None, verbose=True, w_type = 'hanning' ):
+                     psf=None, verbose=True, w_type = 'hanning',
+                     reprojected=True, cbell_alpha=0.5 ):
         '''
         # \\ TODO: make the window function flexible
         
@@ -154,22 +159,33 @@ class BBMBImage ( object ):
         verbose    : (bool, default=True)
         cbell_alpha: (float, default=1.) fraction of values in window function that are 
                      tapered
+        reprojected: (bool, default=True) if True, match PSFs of reprojected images
+                     and variances, otherwise match original images and variances
         '''
         if verbose:
             print ('[SEDMap] Matching PSFs')
+
         if psf is None:
             psf = self.psf
 
         if w_type == 'hanning':
             w1 = HanningWindow ()
         elif w_type == 'cosine':
-            w1 = CosineBellWindow ( alpha=0.8 )
+            w1 = CosineBellWindow ( alpha=cbell_alpha )
         
         if verbose:
             print('    Copying to matched arrays ... ')
-        matched_image = copy.copy ( self.image )
+
+        if reprojected:
+            img_d = self.reprojected_images
+            var_d = self.reprojected_var    
+        else:
+            img_d = self.image
+            var_d = self.var  
+
+        matched_image = copy.copy (img_d)
         matched_psf = copy.copy ( psf )
-        matched_var = copy.copy ( self.var )
+        matched_var = copy.copy ( var_d )
         if matchindex is not None:
             badband = self.bands[matchindex]
         elif refband is not None:
@@ -188,7 +204,7 @@ class BBMBImage ( object ):
             kernel = create_matching_kernel(_pad_psf(psf[cband]),
                                             _pad_psf(psf[badband]),
                                             window=w1)
-            matched_image[cband] = ndimage.convolve(self.image[cband], kernel)
+            matched_image[cband] = ndimage.convolve(img_d[cband], kernel)
             matched_psf[cband] = ndimage.convolve(psf[cband], kernel)
             if verbose:
                 print('         ... Done.')
@@ -196,19 +212,82 @@ class BBMBImage ( object ):
             # \\ Propagate error through convolution following Klein+21
             # \\ ignoring initial pixel correlations!!
             # \\ ( https://iopscience.iop.org/article/10.3847/2515-5172/abe8df )
-            matched_var[cband] = ndimage.convolve(self.var[cband], kernel**2)
-            
+            matched_var[cband] = ndimage.convolve(var_d[cband], kernel**2)
+
         self.matched_image = matched_image
         self.matched_psf = matched_psf
         self.matched_var = matched_var
         return matched_image, matched_psf
-    
+
+    def reproject(self, psf_matched=False, refband='N708'):
+        """
+        Reproject all image bands onto the WCS of a reference band.
+        Parameters
+        ----------
+        psf_matched : bool, optional
+            If True, use PSF-matched images and variances for reprojection.
+            If False (default), use the original images and variances.
+        refband : str, optional
+            The band to use as the reference for WCS and output shape.
+            Default is 'N708'.
+        Returns
+        -------
+        reprojected_images : dict
+            Dictionary mapping band names to their reprojected image arrays.
+        Notes
+        -----
+        - The method also stores the reprojected images and variances in
+          `self.reprojected_images` and `self.reprojected_var`.
+        - NaN values in the reprojected arrays are replaced with zeros.
+        - Each band's image and variance are reprojected using interpolation
+          onto the reference WCS and shape.
+        """
+
+
+        
+        # ideally, you should reproject before psf matching
+        if psf_matched:
+            img_d = self.matched_image
+            var_d = self.matched_var
+        else:
+            img_d = copy.copy(self.image)
+            var_d = copy.copy(self.var)
+
+        # Choose a reference WCS from one of the bands (N708 in this case)
+        reference_wcs = WCS(self.hdu[refband])
+        reference_shape = img_d[refband].shape
+
+        # Create a dictionary to store the reprojected images
+        reprojected_images = {}
+        reprojected_var = {}
+        # Reproject each band onto the reference WCS
+        for band in self.bands:
+            input_wcs = WCS(self.hdu[band])
+            reprojected_array, footprint = reproject_interp(
+                (img_d[band], input_wcs),
+                reference_wcs,
+                shape_out=reference_shape
+            )
+            reprojected_images[band] = np.nan_to_num(reprojected_array, 0)
+
+            reprojected_var_array, footprint_var = reproject_interp(
+                (var_d[band], input_wcs),
+                reference_wcs,
+                shape_out=reference_shape
+            )
+            reprojected_var[band] = np.nan_to_num(reprojected_var_array, 0)
+
+        self.reprojected_images = reprojected_images
+        self.reprojected_var = reprojected_var
+        return reprojected_images
+
     def compute_mbexcess ( self,
                           band, 
                           method='single', 
                           scaling_factor=1.,
                           scaling_band='z',
-                          psf_matched=True, 
+                          psf_matched=True,
+                          reprojected=True,
                           pre_smooth=False,
                           post_smooth=False,
                           extinction_correction=None,
@@ -221,9 +300,15 @@ class BBMBImage ( object ):
         Compute per-pixel medium-band excess over an estimate of the
         continuum
         '''
+        # note that ideally, psf_matched images have already been reprojected
         if psf_matched:
             img_d = self.matched_image
             var_d = self.matched_var
+        
+        elif reprojected:
+            img_d = self.reprojected_images
+            var_d = self.reprojected_var
+
         else:
             img_d = self.image
             var_d = self.var
@@ -231,7 +316,7 @@ class BBMBImage ( object ):
         # \\ get MB image
         mbimg = img_d[band]
         v_mbimg = var_d[band]
-        
+
         # \\ compute our continuum estimate:
         if method == 'average':
             bb0,bb1 = scaling_band
@@ -239,7 +324,7 @@ class BBMBImage ( object ):
             bb_red = img_d[bb1]            
             v_bb_blue = var_d[bb0]
             v_bb_red = var_d[bb1]
-            
+
             continuum = 0.5 * ( bb_blue + bb_red )
             v_continuum = 0.25 * (v_bb_blue + v_bb_red)
         elif method == 'single':
@@ -249,7 +334,7 @@ class BBMBImage ( object ):
             from . import emission
 
             if pre_smooth:
-                img_c = dict([(b,generic_filter(img_d[b], np.mean, size=3)) for b in img_d.keys()])
+                img_c = dict([(b,generic_filter(img_d[b], np.nanmedian, size=3, mode = 'constant', cval = np.nan)) for b in img_d.keys()])
             else:
                 img_c = img_d
 
