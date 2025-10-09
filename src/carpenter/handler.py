@@ -108,12 +108,16 @@ def pull_merian_cutouts(coordlist, butler, save=True, savedir='./', half_size=No
         ra, dec = ccoord
         mer_imgs = []
         for filt in ['N708', 'N540']:
+            # try:
             img, psf, _ = generate_cutout(butler, 'hsc_rings_v1', 
                                         ra, dec, 
                                         half_size=half_size,
                                         band=filt, 
                                         data_type='deepCoadd_calexp',
                                         psf=True)
+            # except:
+            #     print(f"Problem with {ccoord} in {filt} band. Skipping...")
+            #     continue
             if save:            
                 sc = coordinates.SkyCoord ( *ccoord, unit='deg' )
                 filename = conventions.produce_merianfilename ( sc, filt, objtype='merim', savedir=savedir )  
@@ -198,7 +202,7 @@ def fetch ( coordlist, savedir, butler=None, hsc_username=None, hsc_passwd=None,
 
 def fetch_hsc( coordlist, savedir, hsc_username=None, hsc_passwd=None, overwrite=False,
                mvfromsubdir = True, psf_centered="true", rename_psf = True, half_size=None, 
-               filetype='coadd/bg', retrim=True, bands = 'grizy', *args, **kwargs):
+               filetype='coadd/bg', retrim=True, bands = 'grizy', psf_only=False, *args, **kwargs):
     if not os.path.exists(f'{savedir}/hsc'):
         os.makedirs ( f'{savedir}/hsc/' )
 
@@ -227,6 +231,9 @@ def fetch_hsc( coordlist, savedir, hsc_username=None, hsc_passwd=None, overwrite
     #if butler is None:
     #    butler = instantiate_butler ()
     downloadfile = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_file=False, half_size=half_size, filetype=filetype, bands=bands, **kwargs)
+    if psf_only:
+        downloadfile = setup_hsc_request ( [], savedir=f'{savedir}/hsc', psf_file=False, half_size=half_size, filetype=filetype, bands=bands, **kwargs)
+
     downloadfile_psf = setup_hsc_request ( coordlist, savedir=f'{savedir}/hsc', psf_centered=psf_centered, psf_file=True, half_size=half_size,
                                           filetype='coadd', bands=bands, **kwargs)
     download_hsccutouts ( downloadfile, downloadfile_psf, f'{savedir}/hsc', username=hsc_username, passwd=hsc_passwd)
@@ -234,6 +241,7 @@ def fetch_hsc( coordlist, savedir, hsc_username=None, hsc_passwd=None, overwrite
     if mvfromsubdir:
         clean_hsc_subdirs (savedir, half_size, retrim)
     if rename_psf:
+        print ("Renaming PSF files...")
         do_rename_psf(coordlist, savedir, bands)
         
 def clean_hsc_subdirs (savedir, half_size, retrim):
@@ -276,27 +284,43 @@ def retrim_hsc ( new_file, half_size, ):
     newhdulist.writeto(new_file, overwrite=True)
     return 0, 'Completed'
     
-def do_rename_psf(coordlist, savedir, bands):
-    # do this instead of glob - much faster
-    all_files = os.listdir(os.path.join(savedir, 'hsc'))
+def do_rename_psf(coordlist, savedir, bands, double_check=True):
+    # Psf files are saved based on index
     filename_psf_new = lambda band, cname: os.path.join(savedir, "hsc", f"{cname}_HSC-{band.lower()}_psf.fits")
-    for c in coordlist:
+    all_files = os.listdir(os.path.join(savedir, 'hsc'))
+    all_psf_files = [f for f in all_files if ('psf' in f) and ('.fits' in f) and ('psf.fits' not in f)]
+    all_psf_files_num = [int(f.split("-")[0]) for f in all_psf_files]
+    all_psf_files = np.array(all_psf_files)[np.argsort(all_psf_files_num)]
+
+    for ii, c in enumerate(coordlist):
         ra, dec = c
         sc = coordinates.SkyCoord (ra, dec, unit='deg' )
         cname = conventions.produce_merianobjectname(skycoordobj=sc)
-        fnames = [f.split('/')[-1].replace(".", r'\.').replace("*", ".*") for f in hscpsf_filename_original ('X', ra, dec, savedir)]
-        for band in bands:
-            old_file = np.concatenate([[f for f in all_files if re.compile(fname.replace('X', band.upper())).match(f)] for fname in fnames])
-            if len(old_file) > 0:
-                old_file = old_file[0]
-                if not os.path.exists(os.path.join(savedir, 'hsc', old_file)):
-                    print(f"No old file found for {cname} in {band} band")
-                    continue
-                new_file = filename_psf_new(band, cname)
-                os.rename(os.path.join(savedir, 'hsc', old_file), new_file)
-                print(f"Renamed {old_file.split('/')[-1]} to {new_file.split('/')[-1]}")
+
+        old_files =  all_psf_files[ii*len(bands):(ii+1)*len(bands)]
+
+        if double_check:
+            if len(old_files) == 0:
+                print(f"No PSF files found for {cname}. Skipping...")
+                continue
+
+            # double check that the files are correct
+            old_files_check = [f.split('/')[-1].replace(".", r'\.').replace("*", ".*") for f in hscpsf_filename_original ('X', ra, dec, savedir)]
+            all_matched = np.all([np.any([re.compile(fname.replace('X', band.upper())).match(f) 
+                                          for fname in old_files_check]) 
+                                          for band, f in zip(bands, old_files)])
+
+            if not all_matched:
+                print(f"Warning: Mismatch in PSF files for {cname}. Expected {old_files_check}, found {old_files}")
+                continue
             else:
-                print(f"No old file found for {cname} in {band} band")
+                print(f"All files matched for {cname}. Proceeding with renaming...")
+
+
+        for band, old_file in zip(bands, old_files):
+            new_file = filename_psf_new(band, cname)
+            os.rename(os.path.join(savedir, 'hsc', old_file), new_file)
+            print(f"Renamed {old_file.split('/')[-1]} to {new_file.split('/')[-1]}")
 
 def hscpsf_filename_original (band, ra, dec, savedir):
         ra_trunc = str(ra).split(".")
@@ -307,8 +331,10 @@ def hscpsf_filename_original (band, ra, dec, savedir):
 
         fname_trunc = os.path.join(savedir, "hsc", f"*{band.upper()}*{ra_trunc}*{dec_trunc}*")
         fname_round = os.path.join(savedir, "hsc", f"*{band.upper()}*{ra:.2f}*{dec:.2f}*")
+        fname_rt = os.path.join(savedir, "hsc", f"*{band.upper()}*{ra:.2f}*{dec_trunc}*")
+        fname_tr = os.path.join(savedir, "hsc", f"*{band.upper()}*{ra_trunc}*{dec:.2f}*")
         if fname_trunc != fname_round:
-            return(fname_trunc, fname_round)
+            return(fname_trunc, fname_round, fname_rt, fname_tr)
         else:
             return([fname_trunc])
     
@@ -345,7 +371,8 @@ def fetch_merian(coordlist, savedir, butler=None, overwrite=False,
             
         
     if not overwrite:
-        keepcoord = [not merian_images_already_downloaded(c, savedir) for c in coordlist]
+        print ("Finding which coordinates' cutouts have already been downloaded...")
+        keepcoord = [not merian_images_already_downloaded(c, savedir) for c in tqdm(coordlist)]
         if sum(keepcoord)==0:
             print("All of these coordinates' cutouts have already been saved!")
             return()
