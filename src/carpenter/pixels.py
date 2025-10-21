@@ -101,7 +101,8 @@ class BBMBImage ( object ):
         self.hdu[name] = imhdu.header
         self.image[name] = imhdu.data[imslice].byteswap().newbyteorder()
         self.var[name] = FITSCutout ( var, center, [size,size], extension=var_ext ).fits_cutouts[0][1].data[imslice].byteswap().newbyteorder()
-        self.psf[name] = fits.getdata(psf, psf_ext)
+        if psf is not None:
+            self.psf[name] = fits.getdata(psf, psf_ext)
         self.bands.append(name)
         
     @property
@@ -366,7 +367,7 @@ class BBMBImage ( object ):
                 ns_correction=line_correction,
                 zp=27.,
                 ctype=continuum_type,
-                plawbands=average_bb[band],
+                plawbands=average_bb[band.lower()],
                 specflux_unit = u.nJy
             )
             # return emission_package
