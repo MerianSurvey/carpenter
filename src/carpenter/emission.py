@@ -552,14 +552,14 @@ def mbestimate_emission_line(
     
     # Calculate filter transmission properties
     tc_integrated = math.trapz(
-        transmission['transmission_lambda'], 
+        transmission['transmission_lambda'] * transmission['wv'].value, 
         transmission['wv'].value
     ) * transmission['wv'].unit
     trans_atline = np.interp(
         line_restwl * (1. + redshift), 
         transmission['wv'], 
         transmission['transmission_lambda']
-    )
+    ) * line_restwl * (1. + redshift)
     
     # Calculate photon energy at observed wavelength
     line_energy = (co.h * co.c / (line_restwl * (1. + redshift))).to(u.erg)
