@@ -554,7 +554,7 @@ def mbestimate_emission_line(
     tc_integrated = math.trapz(
         transmission['transmission_lambda'] * transmission['wv'].value, 
         transmission['wv'].value
-    ) * transmission['wv'].unit
+    ) * transmission['wv'].unit**2
     trans_atline = np.interp(
         line_restwl * (1. + redshift), 
         transmission['wv'], 
