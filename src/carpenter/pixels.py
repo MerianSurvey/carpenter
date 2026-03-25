@@ -147,11 +147,8 @@ class BBMBImage ( object ):
         if save:
             self.fwhm_to_match = fwhm_a.max()
             self.band_to_match = self.bands[np.argmax(fwhm_a)]
-<<<<<<< HEAD
             self.psf_matching_params = {'alpha':alpha_a[np.argmax(fwhm_a)], 'gamma':gamma_a[np.argmax(fwhm_a)]}
-=======
         self.model_psf = model_psf
->>>>>>> c4d5dce (Add option to use model PSF instead of empirical)
         return fwhm_a, model_psf
 
     def match_psfs ( self, matchindex=None, refband=None,
