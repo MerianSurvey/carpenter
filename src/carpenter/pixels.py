@@ -6,7 +6,7 @@ from astropy.modeling import models, fitting
 from astropy import units as u
 from astropy.io import fits
 import sep
-from photutils.psf.matching import create_matching_kernel, HanningWindow, CosineBellWindow
+from photutils.psf.matching import create_matching_kernel, HanningWindow, CosineBellWindow, TukeyWindow
 from astrocut import FITSCutout
 import astropy.units as u
 from scipy.ndimage import generic_filter
@@ -19,7 +19,7 @@ cosmo = cosmology.FlatLambdaCDM(70.,0.3)
 average_bb = {'n708':'riz', 'n540':'gr'}
 single_bb = {'n708':'i', 'n540':'r'}
 
-def _pad_psf ( psf, desired_length=65 ):
+def _pad_psf ( psf, desired_length=101 ):
     '''
     Zero-pad a PSF image in order to achieve uniform sizes
     '''
@@ -143,15 +143,20 @@ class BBMBImage ( object ):
             alpha_a[ix] = p.alpha.value
             gamma_a[ix] = p.gamma.value
             model_psf[band] = p(x,y)
+            model_psf[band] /= model_psf[band].sum()
         if save:
             self.fwhm_to_match = fwhm_a.max()
             self.band_to_match = self.bands[np.argmax(fwhm_a)]
+<<<<<<< HEAD
             self.psf_matching_params = {'alpha':alpha_a[np.argmax(fwhm_a)], 'gamma':gamma_a[np.argmax(fwhm_a)]}
+=======
+        self.model_psf = model_psf
+>>>>>>> c4d5dce (Add option to use model PSF instead of empirical)
         return fwhm_a, model_psf
 
     def match_psfs ( self, matchindex=None, refband=None,
                      psf=None, verbose=True, w_type = 'hanning',
-                     reprojected=True, cbell_alpha=0.5 ):
+                     reprojected=True, cbell_alpha=0.5, use_model_psf=True):
         '''
         # \\ TODO: make the window function flexible
         
@@ -170,6 +175,8 @@ class BBMBImage ( object ):
                      tapered
         reprojected: (bool, default=True) if True, match PSFs of reprojected images
                      and variances, otherwise match original images and variances
+        use_model_psf: (bool, default=True) if True, use the Moffat model fits to the PSFs
+                       for matching, otherwise use the original PSF cutouts
         '''
         if verbose:
             print ('[SEDMap] Matching PSFs')
@@ -181,7 +188,8 @@ class BBMBImage ( object ):
             w1 = HanningWindow ()
         elif w_type == 'cosine':
             w1 = CosineBellWindow ( alpha=cbell_alpha )
-        
+        elif w_type == 'tukey':
+            w1 = TukeyWindow ( alpha=cbell_alpha )
         if verbose:
             print('    Copying to matched arrays ... ')
 
@@ -210,9 +218,14 @@ class BBMBImage ( object ):
             cband = self.bands[idx]
             if verbose:
                 print(f'    Convolving matching kernel for {self.bands[idx]} ...')
-            kernel = create_matching_kernel(_pad_psf(psf[cband]),
-                                            _pad_psf(psf[badband]),
-                                            window=w1)
+            if use_model_psf:
+                kernel = create_matching_kernel(self.model_psf[cband],
+                                                self.model_psf[badband],
+                                                window=w1)
+            else:
+                kernel = create_matching_kernel(_pad_psf(psf[cband]),
+                                                _pad_psf(psf[badband]),
+                                                window=w1)
             matched_image[cband] = ndimage.convolve(img_d[cband], kernel)
             matched_psf[cband] = ndimage.convolve(psf[cband], kernel)
             if verbose:
@@ -355,8 +368,8 @@ class BBMBImage ( object ):
                 img_c['z'].flatten(),
                 redshift=redshift,
                 u_mb_data=var_d[band].flatten()**0.5,
-                u_rdata=var_d['g'].flatten()**0.5,
-                u_idata=var_d['r'].flatten()**0.5,
+                u_rdata=var_d['r'].flatten()**0.5,
+                u_idata=var_d['i'].flatten()**0.5,
                 band=band.lower(),
                 do_aperturecorrection=False,
                 do_extinctioncorrection=extinction_correction is not None,
