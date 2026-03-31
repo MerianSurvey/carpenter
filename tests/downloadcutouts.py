@@ -8,21 +8,18 @@ Need to do this first:
     setup lsst_distrib
 
 Then for example:
-python ~/Merian/Metallicity/downloadcutouts.py --coordfile=/scratch/gpfs/JENNYG/abbymintz/Merian/Metallicity/desi_match_coords.txt --savedir=/scratch/gpfs/JENNYG/abbymintz/Merian/Metallicity/cutouts/ --imagetype=hsc --hscfilts=griz --halfsize=15"""
+python downloadcutouts.py --coordfile=coordlist_example.txt --savedir=savedir_example --imagetype=hsc --hscfilts=griz --halfsize=15
+or
+python downloadcutouts.py --coordfile=coordlist_example.txt --savedir=savedir_example --imagetype=merian --halfsize=15"""
 
 import os, sys
-sys.path.append('/home/am2907/Merian/carpenter/src')
+sys.path.append('../src')
 from carpenter import handler
 from carpenter.conventions import produce_merianobjectname
-import numpy as np
-from astropy import coordinates
-from astropy.io import fits
 import astropy.units as u
-import matplotlib.pyplot as plt
-from matplotlib import colors
-from astropy.visualization import make_lupton_rgb
 import argparse
 
+# default values
 cfile ="carpenter/tests/coordlist_example.txt"
 savedir = 'savedir_example'
 imagetype = "merian"
