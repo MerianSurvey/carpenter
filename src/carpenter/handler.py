@@ -311,7 +311,8 @@ def do_rename_psf(coordlist, savedir, bands, double_check=True):
                                           for band, f in zip(bands, old_files)])
 
             if not all_matched:
-                print(f"Warning: Mismatch in PSF files for {cname}. Expected {old_files_check}, found {old_files}")
+                print(f"Warning: Mismatch in PSF files for {cname} in bands {[band for band, f in zip(bands, old_files) if not np.any([re.compile(fname.replace('X', band.upper())).match(f) 
+                                          for fname in old_files_check])]}. Expected {old_files_check}, found {old_files}")
                 continue
             else:
                 print(f"All files matched for {cname}. Proceeding with renaming...")

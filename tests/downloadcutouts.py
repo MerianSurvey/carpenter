@@ -20,12 +20,12 @@ import astropy.units as u
 import argparse
 
 # default values
-cfile ="carpenter/tests/coordlist_example.txt"
+cfile ="coordlist_example.txt"
 savedir = 'savedir_example'
 imagetype = "merian"
 
-password = "your_hsc_password"
-username = "your_hsc_username"
+password = "password"
+username = "username"
 
 butler = handler.instantiate_butler (repo='/scratch/gpfs/MERIAN/repo/repos/main_2022_12_19', collections='DECam/runs/merian/dr1_wide')
 
