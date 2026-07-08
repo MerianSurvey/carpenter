@@ -257,7 +257,9 @@ class BBMBImage ( object ):
         -----
         - The method also stores the reprojected images and variances in
           `self.reprojected_images` and `self.reprojected_var`.
-        - NaN values in the reprojected arrays are replaced with zeros.
+        - NaN pixels in the reprojected image are replaced with zero; NaN
+          pixels in the reprojected variance are set to +inf so downstream
+          inverse-variance weightmaps deweight them to zero.
         - Each band's image and variance are reprojected using interpolation
           onto the reference WCS and shape.
         """
@@ -287,14 +289,14 @@ class BBMBImage ( object ):
                 reference_wcs,
                 shape_out=reference_shape
             )
-            reprojected_images[band] = np.nan_to_num(reprojected_array, 0)
+            reprojected_images[band] = np.nan_to_num(reprojected_array, nan=0.0)
 
             reprojected_var_array, footprint_var = reproject_interp(
                 (var_d[band], input_wcs),
                 reference_wcs,
                 shape_out=reference_shape
             )
-            reprojected_var[band] = np.nan_to_num(reprojected_var_array, 0)
+            reprojected_var[band] = np.nan_to_num(reprojected_var_array, nan=np.inf)
 
         self.reprojected_images = reprojected_images
         self.reprojected_var = reprojected_var
