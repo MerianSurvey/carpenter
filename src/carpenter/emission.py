@@ -104,113 +104,99 @@ def estimate_av (merian, dirstem=None):
     return av, u_av
 
 
-def correct_NIISII(z, mass, source = "DESI"):
+def correct_NIISII(z, mass, source="DESI"):
     """
     Calculate correction factors for [NII] and [SII] line contamination in N708 filter.
-    
+
     This function computes multiplicative correction factors to account for contamination
     from [NII]6548,6583 and [SII]6716,6731 emission lines in the N708 medium-band filter,
     which is primarily designed to measure H-alpha. The corrections are based on empirical
     relationships from Mintz+24 and depend on both redshift and stellar mass.
-    
+
     Parameters
     ----------
     z : float or array-like
         Redshift(s) of the source(s)
     mass : float or array-like
         Log10 stellar mass(es) in solar masses, aperture-corrected
-    
+    source : {"DESI", "SDSS"}
+        Which empirical calibration to use.
+
     Returns
     -------
     float or array-like
         Multiplicative correction factor(s). Values > 1 indicate that the observed
         N708 flux is higher than pure H-alpha due to line contamination.
-        
+
     Notes
     -----
-    - Correction factors are binned by stellar mass: low (< 9.2), mid (9.2-9.8), high (> 9.8)
-    - Redshift dependence is piecewise: low (< 0.074), mid (0.074-0.083), high (> 0.083)
-    - In the mid-redshift range, corrections vary linearly with redshift
-    - Based on empirical fitting from Mintz+24
-    - Only valid for N708 filter measurements
-    
+    - Correction factors are binned by stellar mass; the bin edges and per-bin
+    coefficients are defined inside the function per `source`. Extending to
+    a different number of mass bins just requires adding edges + coefficients.
+    - Redshift dependence is piecewise: flat below z=0.074, flat above z=0.083,
+    linear ramp in between.
+    - Each coefficient tuple is (lowz_median, highz_median, linear_slope).
+    - Based on empirical fitting from Mintz+24.
+    - Only valid for N708 filter measurements.
+
     Examples
     --------
     >>> # Single source
     >>> correction = correct_NIISII(0.08, 9.5)
-    >>> 
+    >>>
     >>> # Multiple sources
     >>> corrections = correct_NIISII([0.07, 0.08, 0.09], [9.0, 9.5, 10.0])
     """
-    
-    # SDSS
-    if source == "SDSS":
-        c0 = (1.39, 1.22, -18.8)
-        c1 = (1.77, 1.39, -41.29)
-        c2 = (1.85, 1.48, -41.97)
-    elif source == "DESI":
-        c0 = (1.47, 1.06, -45.70)
-        c1 = (1.77, 1.29, -53.29)
-        c2 = (1.86, 1.40, -50.89)
-    
-    # Handle both scalar and array inputs
-    if hasattr(mass, 'all'):  # Array input
-        correction = np.zeros_like(mass)
-        
-        # Define mass bins
-        lowmass = mass < 9.2
-        midmass = (mass >= 9.2) & (mass < 9.8)
-        highmass = (mass >= 9.8)
-        
-        # Define redshift bins
-        lowz = z < 0.074
-        midz = (z >= 0.074) & (z < 0.083)
-        highz = z > 0.083
-        
-        # Low mass corrections
-        correction[lowmass & lowz] = c0[0]
-        correction[lowmass & midz] = c0[2] * (z[lowmass & midz] - 0.074) + c0[0]
-        correction[lowmass & highz] = c0[1]
+    sources = {
+        "SDSS": {
+            "mass_edges": [9.2, 9.8],
+            "coefs": [
+                (1.39, 1.22, -18.8),
+                (1.77, 1.39, -41.29),
+                (1.85, 1.48, -41.97),
+            ],
+        },
+        "DESI": {
+            "mass_edges": [9., 9.5, 10.], 
+            "coefs": [
+                (1.50, 1.09, -44.61),
+                (1.71, 1.24, -51.38),
+                (1.86, 1.43, -48.44),
+                (1.96, 1.64, -36.11),
+        ],
+    },
+    }
+    Z_LO, Z_HI = 0.074, 0.083
 
-        # Mid mass corrections
-        correction[midmass & lowz] = c1[0]
-        correction[midmass & midz] = c1[2] * (z[midmass & midz] - 0.074) + c1[0]
-        correction[midmass & highz] = c1[1]
+    if source not in sources:
+        raise ValueError(f"unknown source {source!r}; options: {list(sources)}")
+    edges = sources[source]["mass_edges"]
+    coefs = np.asarray(sources[source]["coefs"], dtype=float)  # (Nbin, 3)
+    if len(coefs) != len(edges) + 1:
+        raise ValueError(
+            f"{source}: {len(coefs)} coef tuples but {len(edges)} edges "
+            f"(need {len(coefs)-1} edges for {len(coefs)} bins)"
+        )
 
-        # High mass corrections
-        correction[highmass & lowz] = c2[0]
-        correction[highmass & midz] = c2[2] * (z[highmass & midz] - 0.074) + c2[0]
-        correction[highmass & highz] = c2[1]
+    z = np.asarray(z, dtype=float)
+    mass = np.asarray(mass, dtype=float)
+    scalar = z.ndim == 0 and mass.ndim == 0
 
-        return correction
-        
-    else:  # Scalar input
-        # Low mass regime (log M* < 9.2)
-        if mass < 9.2:
-            if z < 0.074:
-                return c0[0]
-            elif z > 0.083:
-                return c0[1]
-            else:
-                return c0[2] * (z - 0.074) + c0[0]
+    z2 = np.atleast_1d(z)
+    m2 = np.atleast_1d(mass)
+    if z2.shape != m2.shape:
+        z2, m2 = np.broadcast_arrays(z2, m2)
 
-        # Mid mass regime (9.2 <= log M* < 9.8)
-        elif mass < 9.8:
-            if z < 0.074:
-                return c1[0]
-            elif z > 0.083:
-                return c1[1]
-            else:
-                return c1[2] * (z - 0.074) + c1[0]
+    bin_idx = np.digitize(m2, edges)               # 0..Nbin-1
+    lo  = coefs[bin_idx, 0]
+    hi  = coefs[bin_idx, 1]
+    slp = coefs[bin_idx, 2]
 
-        # High mass regime (log M* >= 9.8)
-        else:
-            if z < 0.074:
-                return c2[0]
-            elif z > 0.083:
-                return c2[1]
-            else:
-                return c2[2] * (z - 0.074) + c2[0]
+    ramp = slp * (z2 - Z_LO) + lo
+    out = np.where(z2 < Z_LO, lo,
+          np.where(z2 > Z_HI, hi, ramp))
+
+    return float(out) if scalar else out
             
 def compute_galactic_extinction(ra, dec, verbose=1, dirstem=None,  rv=3.1,):
     if dirstem is None:        
