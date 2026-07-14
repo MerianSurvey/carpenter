@@ -99,8 +99,8 @@ class BBMBImage ( object ):
         # cc = cutouts._hducut ( x[1], center, [half_size, half_size] )
         imhdu = FITSCutout ( image, center, [size,size], extension=image_ext ).fits_cutouts[0][1]
         self.hdu[name] = imhdu.header
-        self.image[name] = imhdu.data[imslice].byteswap().newbyteorder()
-        self.var[name] = FITSCutout ( var, center, [size,size], extension=var_ext ).fits_cutouts[0][1].data[imslice].byteswap().newbyteorder()
+        self.image[name] = imhdu.data[imslice]#.byteswap().newbyteorder()
+        self.var[name] = FITSCutout ( var, center, [size,size], extension=var_ext ).fits_cutouts[0][1].data[imslice]#.byteswap().newbyteorder()
         if psf is not None:
             self.psf[name] = fits.getdata(psf, psf_ext)
         self.bands.append(name)

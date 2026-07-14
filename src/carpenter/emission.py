@@ -12,8 +12,7 @@ from astropy import table
 from astropy import units as u
 from astropy.io import fits
 
-from ekfphys import observer
-from ekfstats import fit, math
+from . import utils
 
 cosmo = cosmology.FlatLambdaCDM(70.,0.3)
 
@@ -38,10 +37,10 @@ def excess_to_lineflux ( flux_freq, band):
     wv_eff_mb  = {'n540':5400.,'n708':7080.}[band]
     transmission = load_transmission(None, band=band)
     #flux_freq = float(table.Table(emcat)['flux'])*conversion*u.nJy
-    flux_wv = observer.fnu_to_flambda(wv_eff_mb * u.AA, flux_freq).to(u.erg/u.s/u.cm**2/u.AA)
+    flux_wv = utils.fnu_to_flambda(wv_eff_mb * u.AA, flux_freq).to(u.erg/u.s/u.cm**2/u.AA)
 
     # Calculate filter transmission properties
-    tc_integrated = math.trapz(
+    tc_integrated = utils.trapz(
         transmission['transmission_lambda'], 
         transmission['wv'].value
     ) * transmission['wv'].unit
@@ -96,8 +95,8 @@ def estimate_av (merian, dirstem=None):
     n = len(saga_coeffs)
     deg = int((-3 + np.sqrt ( 9 - 4*(2-2*n) )) // 2 )
 
-    av = 10.**fit.poly2d(Mr, gr, saga_coeffs, deg )
-    u_av = fit.poly2d(Mr, gr, saga_u_coeffs, deg)
+    av = 10.**utils.poly2d(Mr, gr, saga_coeffs, deg )
+    u_av = utils.poly2d(Mr, gr, saga_u_coeffs, deg)
     u_av[av>4] = np.inf
     av[av>4] = np.NaN
     
@@ -232,7 +231,7 @@ def compute_galactic_extinction(ra, dec, verbose=1, dirstem=None,  rv=3.1,):
     ge_arr = np.zeros([len(ra),wv_eff.size])
     for idx,c_av in enumerate(direct_geav):
         #wv_eff[2] = wv_eff.value * (1. + z)
-        ge_arr[idx] = observer.gecorrection ( wv_eff, c_av, rv, return_magcorr=False)
+        ge_arr[idx] = utils.gecorrection ( wv_eff, c_av, rv, return_magcorr=False)
     return ge_arr
             
 def compute_emissioncorrections(
@@ -360,7 +359,7 @@ def compute_emissioncorrections(
             dust_correction[:, idx] = np.NaN
         else:
             # Calculate extinction correction using R_V = 4.05
-            dc = observer.extinction_correction(restwl, av, u_av=u_av, RV=4.05)
+            dc = utils.extinction_correction(restwl, av, u_av=u_av, RV=4.05)
             dust_correction[0, idx] = dc[0].data
             if dc[1] is not None:
                 dust_correction[1, idx] = dc[1]
@@ -493,7 +492,7 @@ def mbestimate_emission_line(
         wv_eff = np.array([wdict[band] for band in plawbands])
         lsq_x = wv_eff
         lsq_y = np.array([fdict[band] for band in plawbands])
-        lsq_coeffs = fit.closedform_leastsq(lsq_x, lsq_y)
+        lsq_coeffs = utils.closedform_leastsq(lsq_x, lsq_y)
         bandspecflux_continuum = (lsq_coeffs[0] + lsq_coeffs[1] * wv_eff_mb).flatten() * specflux_unit
         
     elif ctype == 'powerlaw':
@@ -507,7 +506,7 @@ def mbestimate_emission_line(
         v_offset = np.min(np.array([fdict[band] for band in plawbands]), axis=0)
         v_offset = np.where(v_offset > 0, 0, v_offset*1.01) # only need to shift if negative and need min to be >0
         lsq_y = np.log10(np.array([fdict[band] for band in plawbands] - v_offset))
-        lsq_coeffs = fit.closedform_leastsq(lsq_x, lsq_y)
+        lsq_coeffs = utils.closedform_leastsq(lsq_x, lsq_y)
         
         # Continuum flux at line center 
         line_center_continuum = 10.**(lsq_coeffs[0] + lsq_coeffs[1] * np.log10(wv_rest_mb * (1+redshift))).flatten() * specflux_unit
@@ -533,11 +532,11 @@ def mbestimate_emission_line(
     )
     
     # Convert to spectral flux density (f_lambda)
-    bsf_lambda = observer.fnu_to_flambda(wv_eff_mb * u.AA, bandspecflux_line)
-    u_bsf_lambda = observer.fnu_to_flambda(wv_eff_mb * u.AA, u_bandspecflux_line)
+    bsf_lambda = utils.fnu_to_flambda(wv_eff_mb * u.AA, bandspecflux_line)
+    u_bsf_lambda = utils.fnu_to_flambda(wv_eff_mb * u.AA, u_bandspecflux_line)
     
     # Calculate filter transmission properties
-    tc_integrated = math.trapz(
+    tc_integrated = utils.trapz(
         transmission['transmission_lambda'] * transmission['wv'].value, 
         transmission['wv'].value
     ) * transmission['wv'].unit**2
